@@ -1,8 +1,10 @@
 from pathlib import Path
 import pandas as pd
 from torchtext.data import Field, TabularDataset, BucketIterator
+from torchtext.vocab import GloVe
 
 DATA_DIR = Path("../data/mtl-dataset")
+GLOVE_DIR = Path("../data")
 DATASETS = ['apparel', 'baby', 'books', 'camera_photo',  'electronics', 
       'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines', 
       'music', 'software', 'sports_outdoors', 'toys_games', 'video']
@@ -33,7 +35,7 @@ def prepare_data(dataset_list: list=DATASETS, data_dir: Path=DATA_DIR,
     test_dfs.to_csv(DATA_DIR / "test.csv", index=False)
 
 def get_data(train_file: str="train.csv", dev_file: str="dev.csv", test_file: str="test.csv",
-             tokenizer: Any=lambda x: x.split(), include_lengths: bool=True):
+             tokenizer: any=lambda x: x.split(), include_lengths: bool=True):
     text_field = Field(sequential=True, tokenize=tokenizer, lower=True, batch_first=True, include_lengths=True)
     label_field = Field(sequential=False, use_vocab=False)
     task_field = Field(sequential=False, use_vocab=False)
@@ -41,5 +43,5 @@ def get_data(train_file: str="train.csv", dev_file: str="dev.csv", test_file: st
     train_set, dev_set, test_set = TabularDataset.splits(path=DATA_DIR, root=DATA_DIR,
                                                         train=train_file, validation=dev_file, test=test_file,
                                                         fields=data_fields, skip_header=True, format="csv")
-    text_field.build_vocab(train_set)
+    text_field.build_vocab(train_set, vectors=GloVe(cache=GLOVE_DIR))
     return train_set, dev_set, test_set, text_field.vocab

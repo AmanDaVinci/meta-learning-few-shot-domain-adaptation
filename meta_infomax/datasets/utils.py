@@ -130,3 +130,56 @@ def remove_outlier_lengths(data, quantile: float=0.995):
                 del instances[ix]
             throw_away_ixs[dataset][split] = throw_away
     return throw_away_ixs
+
+
+from transformers import BertTokenizer, BertModel, BertForMaskedLM
+#                     Model          | Tokenizer          | Pretrained weights shortcut
+TRANSFORMER_MODELS = {'bert-base-uncased': (BertModel,       BertTokenizer,   'bert-base-uncased')}
+TRANSFORMER_EMBEDDING_DIMS = {'bert-base-uncased': 768}
+
+# OPTIONAL: if you want to have more information on what's happening under the hood, activate the logger as follows
+# import logging
+# logging.basicConfig(level=logging.INFO)
+
+def get_embedding_dim(model_name):
+    """
+    Get embedding dim of transformer model.
+
+    Parameters
+    ----------
+    model_name: str
+        Name of model's embedding dim to fetch.
+
+    Returns
+    -------
+    embedding_dim, int
+    """
+    return TRANSFORMER_EMBEDDING_DIMS[model_name]
+
+
+def get_transformer(model_name):
+    """
+    Return model from transformers library.
+
+    Parameters
+    ----------
+    model_name: str
+        Name of model to fetch. Also called `pretrained weights shortcut' by huggingface people.
+
+    Returns
+    -------
+    tuple model, tokenizer, embeddding_dim according to model_name
+    """
+    model_class, tokenizer_class, pretrained_weights = TRANSFORMER_MODELS[model_name]
+    model = model_class.from_pretrained(pretrained_weights,
+                                        output_hidden_states=True)
+    tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
+
+    return model, tokenizer, get_embedding_dim(model_name)
+
+
+def get_vocab(data):
+    """Not necessary if we use a pretrained model."""
+    return Vocabulary.from_instances([instance for splits in data.values()
+                                    for instance in splits['train']],
+                                     min_count={'tokens': min_count})

@@ -4,13 +4,13 @@ Utility functions.
 from pathlib import Path
 import pandas as pd
 
-from typing import Iterator, List, Dict, Tuple, Union
+from typing import List, Dict, Tuple, Union
 import torch
 import numpy as np
 
 from allennlp.common.params import Params
 from allennlp.data import Instance
-from allennlp.data.fields import TextField, LabelField
+# from allennlp.data.fields import TextField, LabelField
 from allennlp.data.dataset_readers import DatasetReader
 from allennlp.common.file_utils import cached_path
 from allennlp.data.token_indexers import TokenIndexer, SingleIdTokenIndexer
@@ -24,6 +24,7 @@ from allennlp.common.testing import AllenNlpTestCase
 from allennlp.common.util import ensure_list
 
 
+from torchtext.data import Field, LabelField, TabularDataset, Dataset, Iterator
 from pathlib import Path
 
 GLOVE_DIR = Path("../data/glove")
@@ -70,22 +71,20 @@ def sample_domains(data: Dict[str, Dict[str, List[Instance]]], n_samples: int=5,
     return domains[list(sampler)]
 
 
-def get_iterators(data: Dict[str, Dict[str, List[Instance]]], vocab: Vocabulary, split: str='train',
-                  collapse_domains: bool=False, batch_size: int=64, use_bucket: bool=False, **kwargs) -> Dict[str, Iterator]:
+def get_iterators(data: Dict[str, Dict[str, Dataset]], split: str='train',
+                  collapse_domains: bool=False, batch_size: int=64, device='cpu', **kwargs) -> Dict[str, 'iterator']:
     """
     Generate iterators of each domain from split.
     
     Parameters
     ----------
     data: ``Dict[str, Dict[str, List[Instance]]]`` contains all datasets.
-    vocab: ``Vocabulary``
     split: in {'train', 'val', 'test'}
     collapse_domains: bool
         If True, make one big iterator from all datasets. This means that different domains will be present
         in the same batch.
     batch_size: batch size
-    use_bucket:
-        If true, use bucket iterator. Otherwise use normal one.
+    device: device of tensor
     kwargs: kwargs passed to iterators.
     
     Returns
@@ -94,23 +93,15 @@ def get_iterators(data: Dict[str, Dict[str, List[Instance]]], vocab: Vocabulary,
     we collapse all the domains into one single iterator, which is indexed by 'all' in the returned dict.
     """
     iterators = {}
-    if use_bucket:
-        iterator = BucketIterator(
-            batch_size=batch_size,
-            sorting_keys=[('text', 'num_tokens')], # sort by num_tokens of sentence field for efficient batching
-            padding_noise=kwargs.get('padding_noise', 0.4) # so that we put a bit of randomness when sorting by padding length
-        )
-    else:
-        iterator = BasicIterator(batch_size=batch_size)
-    iterator.index_with(vocab) # for determining padding lengths
-    # generate generators
     if collapse_domains:
         # collect instances from `split` of every domain
-        all_instances = [instance for domain, splits in data.items() for instance in splits[split]]
-        iterators['all'] = iterator(all_instances)
+        all_examples = [example for domain, splits in data.items() for example in splits[split].examples]
+        arbitrary_split_fields = list(data.values())[0][split].fields
+        all_dataset = Dataset(all_examples, fields=arbitrary_split_fields)
+        iterators['all'] = Iterator(all_dataset, batch_size=batch_size, device=device)
     else:
         for dataset, splits in data.items():
-            iterators[dataset] = iterator(splits[split])
+            iterators[dataset] = Iterator(splits[split], batch_size=batch_size, device=device)
     return iterators
 
 
@@ -119,15 +110,15 @@ def remove_outlier_lengths(data, quantile: float=0.995):
     throw_away_ixs = {}
     for dataset, splits in data.items():
         throw_away_ixs[dataset] = {}
-        for split, instances in splits.items():
+        for split, split_set in splits.items():
             if split == 'test':
                 # we don't want to remove test samples.
                 continue
-            lengths = np.array([len(instance.get('text').tokens) for instance in instances])
+            lengths = np.array([len(example.text) for example in split_set.examples])
             keep_lengths = lengths < np.quantile(lengths, quantile)
             throw_away = (keep_lengths == 0).nonzero()[0]
             for ix in throw_away:
-                del instances[ix]
+                del split_set.examples[ix]
             throw_away_ixs[dataset][split] = throw_away
     return throw_away_ixs
 

@@ -8,38 +8,10 @@ from typing import List, Dict, Tuple, Union
 import torch
 import numpy as np
 
-from allennlp.common.params import Params
-from allennlp.data import Instance
-# from allennlp.data.fields import TextField, LabelField
-from allennlp.data.dataset_readers import DatasetReader
-from allennlp.common.file_utils import cached_path
-from allennlp.data.token_indexers import TokenIndexer, SingleIdTokenIndexer
-from allennlp.data.tokenizers import Token
-from allennlp.data.vocabulary import Vocabulary
-from allennlp.models import Model
-from allennlp.modules.text_field_embedders import TextFieldEmbedder, BasicTextFieldEmbedder
-from allennlp.modules.token_embedders import Embedding
-from allennlp.data.iterators import BucketIterator, BasicIterator
-from allennlp.common.testing import AllenNlpTestCase
-from allennlp.common.util import ensure_list
-
-
 from torchtext.data import Field, LabelField, TabularDataset, Dataset, Iterator
 from pathlib import Path
 
 GLOVE_DIR = Path("../data/glove")
-
-
-def get_glove_embeddings(vocab: Vocabulary, glove_dir: Union[Path, str]=GLOVE_DIR,
-                        glove_file: Union[Path, str]='glove.840B.300d.txt'):
-    """Load Glove embeddings from file and generate embeddings."""
-    glove_dir = Path(glove_dir)
-    glove_params = Params({
-        'pretrained_file': (glove_dir / glove_file).as_posix(),
-        'embedding_dim': 300,
-        'trainable': False
-    })
-    return Embedding.from_params(vocab, glove_params)
 
 
 def sample_domains(data: Dict[str, Dict[str, List[Instance]]], n_samples: int=5, strategy: str='uniform') -> np.ndarray:

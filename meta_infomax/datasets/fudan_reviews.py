@@ -25,10 +25,6 @@ import pandas as pd
 
 from sklearn.model_selection import train_test_split
 
-torch.manual_seed(1)
-%load_ext autoreload
-%autoreload 2
-
 DATA_DIR = Path("../data/mtl-dataset")
 GLOVE_DIR = Path("../data")
 DATASETS = ['apparel', 'baby', 'books', 'camera_photo',  'electronics', 
@@ -81,7 +77,6 @@ class FudanReviewDatasetReader(DatasetReader):
         
     No need to tokenize sentence, since that's already been done.
     """
-    
     def __init__(self, token_indexers: Dict[str, TokenIndexer] = None) -> None:
         super().__init__(lazy=False)
         self.token_indexers = token_indexers or {'tokens': SingleIdTokenIndexer(lowercase_tokens=False)}
@@ -98,7 +93,8 @@ class FudanReviewDatasetReader(DatasetReader):
         return Instance(fields)
     
     def _read(self, file_path: str) -> Iterator[Instance]:
-        with open(file_path) as f:
-            for line in f:
-                label, sentence = line.strip(' ').split('\t')
-                yield self.text_to_instance([Token(word) for word in sentence.split()], int(label))
+        df = pd.read_csv(file_path, sep="\t", header=None, names=['label', 'text'])
+        for row in df.itertuples():
+            label, sentence = row.label, row.text
+            # our examples are already tokenized, so just use split
+            yield self.text_to_instance([Token(word) for word in text.split()], label)

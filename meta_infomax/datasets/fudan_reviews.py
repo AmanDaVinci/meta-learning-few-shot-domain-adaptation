@@ -3,7 +3,7 @@ import pandas as pd
 from torchtext.data import Field, TabularDataset, BucketIterator
 from torchtext.vocab import GloVe
 
-from typing import Iterator, List, Dict
+from typing import Iterator, List, Dict, Tuple, Union
 import torch
 import numpy as np
 
@@ -26,7 +26,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 DATA_DIR = Path("../data/mtl-dataset")
-GLOVE_DIR = Path("../data")
+GLOVE_DIR = Path("../data/glove")
 DATASETS = ['apparel', 'baby', 'books', 'camera_photo',  'electronics', 
       'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines', 
       'music', 'software', 'sports_outdoors', 'toys_games', 'video']
@@ -67,8 +67,55 @@ def get_data(train_file: str="train.csv", dev_file: str="dev.csv", test_file: st
                                                         fields=data_fields, skip_header=True, format="csv")
     text_field.build_vocab(train_set, vectors=GloVe(cache=GLOVE_DIR))
     return train_set, dev_set, test_set, text_field.vocab
+    reader = FudanReviewDatasetReader()
 
-@DatasetReader.register("fudan_review") # allows us to specify reader using JSON
+
+def get_fudan_datasets(datasets: List[str]=DATASETS, data_dir: Union[str, Path]=DATA_DIR,
+                       validation_size: float=0.2, min_count: int=0,
+                       random_state: int=11) -> Tuple[Dict[str, Dict[str, List[Instance]]], Vocabulary]:
+    """
+    Get all fudan datasets specified in a dictionary. Also return vocabulary.
+    Gets all train, val, and test tests, with corresponding keys in the returned dict for each dataset.
+
+    Vocab is created from ALL training datasets combined.
+
+    Parameters
+    ----------
+    datasets:
+        Specify domain such as ['apparel', 'baby'].
+    data_dir:
+        Directory of fudan datasets.
+    validation_size: should be in [0, 1].
+        Fraction of validation samples in train set.
+    min_count:
+        Token should appear min_count times to be counted in vocabulary.
+    random_state:
+        Used for validation split.
+
+    Returns
+    -------
+    dict mapping dataset to dict containing train, val, and test sets.
+    """
+    data_dir = Path(data_dir)
+    result = {}
+
+    reader = FudanReviewDatasetReader()
+
+    for idx, dataset in enumerate(datasets):
+        train_file = dataset+".task.train"
+        test_file = dataset+".task.test"
+        train_val_set = reader.read(data_dir / train_file)
+        test_set = reader.read(data_dir / test_file)
+        train_set, validation_set = train_test_split(train_val_set, test_size=validation_size, random_state=random_state)
+        result[dataset] = {'train': train_set, 'val': validation_set, 'test': test_set}
+
+    vocab = Vocabulary.from_instances([example for splits in result.values()
+                                    for example in splits['train']],
+                                    min_count={'tokens': min_count})
+    return result, vocab
+
+
+# @DatasetReader.register("fudan_review") # allows us to specify reader using JSON
 class FudanReviewDatasetReader(DatasetReader):
     """
     DatasetReader for Fudan Review data, one sentence per line, like
@@ -82,8 +129,8 @@ class FudanReviewDatasetReader(DatasetReader):
         self.token_indexers = token_indexers or {'tokens': SingleIdTokenIndexer(lowercase_tokens=False)}
     
     def text_to_instance(self, tokens: List[Token], label: int = None) -> Instance:
-        sentence_field = TextField(tokens, self.token_indexers)
-        fields = {'sentence': sentence_field}
+        text_field = TextField(tokens, self.token_indexers)
+        fields = {'text': text_field}
 
         if label is not None:
             # our labels are already 0-indexed ints -> skip indexing
@@ -94,7 +141,51 @@ class FudanReviewDatasetReader(DatasetReader):
     
     def _read(self, file_path: str) -> Iterator[Instance]:
         df = pd.read_csv(file_path, sep="\t", header=None, names=['label', 'text'])
-        for row in df.itertuples():
-            label, sentence = row.label, row.text
+        for i, row in enumerate(df.itertuples()):
+            label, text = row.label, row.text
             # our examples are already tokenized, so just use split
-            yield self.text_to_instance([Token(word) for word in text.split()], label)
+            try:
+                yield self.text_to_instance([Token(word) for word in text.split()], label)
+            except AttributeError as e:
+                print(e, f'skipping row {i}')
+
+
+def get_glove_embeddings(vocab: Vocabulary, glove_dir: Union[Path, str]=GLOVE_DIR,
+                        glove_file: Union[Path, str]='glove.840B.300d.txt'):
+    """Load Glove embeddings from file and generate embeddings."""
+    glove_dir = Path(glove_dir)
+    glove_params = Params({
+        'pretrained_file': (glove_dir / glove_file).as_posix(),
+        'embedding_dim': 300,
+        'trainable': False
+    })
+    return Embedding.from_params(vocab, glove_params)
+
+
+def sample_domains(data: Dict[str, Dict[str, List[Instance]]], n_samples: int=5, strategy: str='uniform') -> np.ndarray:
+    """Sample domains from data according to strategy
+    
+    Parameters
+    ----------
+    data: contains all data splits for domains
+    n_samples: number of samples to draw
+    strategy: in {'uniform', 'domain_size'}
+        specifies sampling strategy:
+        'uniform': sample uniformly
+        'domain_size': sample more from domain if size of domain is larger
+        
+    Returns
+    -------
+    array of domain names
+    """
+    assert strategy in ('uniform', 'domain_size'), 'specify correct strategy'
+    domains = np.array([d for d in data.keys()])
+    n_domains = len(domains)
+    if strategy == 'uniform':
+        weights = [1] * n_domains
+    elif strategy == 'domain_size':
+        weights = [len(data[domain]['train']) for domain in domains]
+
+    sampler = torch.utils.data.WeightedRandomSampler([1 / n_domains] * n_domains, num_samples=n_samples,
+                                                     replacement=False)
+    return domains[list(sampler)]

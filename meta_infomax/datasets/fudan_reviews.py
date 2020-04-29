@@ -50,6 +50,7 @@ def get_fudan_datasets(tokenizer, datasets: List[str]=DATASETS, data_dir: Union[
     label_field = LabelField(use_vocab=False)
     data_fields = [("label", label_field), ("text", text_field)]
     for idx, dataset in enumerate(datasets):
+        print(f'processing dataset: {dataset}')
         train_file = dataset+".task.train"
         test_file = dataset+".task.test"
         train_val_set, test_set, = TabularDataset.splits(path=data_dir,

@@ -19,7 +19,7 @@ MODEL_NAME = 'bert-base-uncased'
 
 def get_fudan_datasets(tokenizer, datasets: List[str]=DATASETS, data_dir: Union[str, Path]=DATA_DIR,
                        validation_size: float=0.2, min_count: int=0,
-                       random_state: int=11) -> Dict[str, Dict[str, List[Instance]]]:
+                       random_state: int=11) -> Dict[str, Dict[str, List[Dataset]]]:
     """
     Get all fudan datasets specified in a dictionary. Also return vocabulary.
     Gets all train, val, and test tests, with corresponding keys in the returned dict for each dataset.

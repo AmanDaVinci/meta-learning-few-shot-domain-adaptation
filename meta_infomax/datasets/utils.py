@@ -8,13 +8,13 @@ from typing import List, Dict, Tuple, Union
 import torch
 import numpy as np
 
-from torchtext.data import Field, LabelField, TabularDataset, Dataset, Iterator
+from torchtext.data import Field, LabelField, TabularDataset, Dataset, Iterator, Example
 from pathlib import Path
 
 GLOVE_DIR = Path("../data/glove")
 
 
-def sample_domains(data: Dict[str, Dict[str, List[Instance]]], n_samples: int=5, strategy: str='uniform') -> np.ndarray:
+def sample_domains(data: Dict[str, Dict[str, List[Dataset]]], n_samples: int=5, strategy: str='uniform') -> np.ndarray:
     """Sample domains from data according to strategy
     
     Parameters
@@ -50,7 +50,7 @@ def get_iterators(data: Dict[str, Dict[str, Dataset]], split: str='train',
     
     Parameters
     ----------
-    data: ``Dict[str, Dict[str, List[Instance]]]`` contains all datasets.
+    data: ``Dict[str, Dict[str, List[Dataset]]]`` contains all datasets.
     split: in {'train', 'val', 'test'}
     collapse_domains: bool
         If True, make one big iterator from all datasets. This means that different domains will be present

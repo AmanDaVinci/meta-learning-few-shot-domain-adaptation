@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Union, List
+from typing import Union, List, Dict
 
 
 class Classifier(nn.Module):

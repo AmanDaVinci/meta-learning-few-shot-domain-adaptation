@@ -1,20 +1,17 @@
 """
 Utility functions.
 """
-from pathlib import Path
-import pandas as pd
 
-from typing import List, Dict, Tuple, Union
-import torch
 import numpy as np
-
-from torchtext.data import Field, LabelField, TabularDataset, Dataset, Iterator, Example
+import torch
 from pathlib import Path
+from torchtext.data import Dataset, Iterator
+from typing import List, Dict
 
 GLOVE_DIR = Path("../data/glove")
 
 
-def sample_domains(data: Dict[str, Dict[str, List[Dataset]]], n_samples: int=5, strategy: str='uniform') -> np.ndarray:
+def sample_domains(data: Dict[str, Dict[str, List[Dataset]]], n_samples: int = 5, strategy: str = 'uniform') -> np.ndarray:
     """Sample domains from data according to strategy
     
     Parameters
@@ -43,8 +40,8 @@ def sample_domains(data: Dict[str, Dict[str, List[Dataset]]], n_samples: int=5, 
     return domains[list(sampler)]
 
 
-def get_iterators(data: Dict[str, Dict[str, Dataset]], split: str='train',
-                  collapse_domains: bool=False, batch_size: int=64, device='cpu', **kwargs) -> Dict[str, 'iterator']:
+def get_iterators(data: Dict[str, Dict[str, Dataset]], split: str = 'train',
+                  collapse_domains: bool = False, batch_size: int = 64, device='cpu', **kwargs) -> Dict[str, 'Iterator']:
     """
     Generate iterators of each domain from split.
     
@@ -77,7 +74,7 @@ def get_iterators(data: Dict[str, Dict[str, Dataset]], split: str='train',
     return iterators
 
 
-def remove_outlier_lengths(data, quantile: float=0.995):
+def remove_outlier_lengths(data, quantile: float = 0.995):
     """Remove outliers in place and return thrown away indices."""
     throw_away_ixs = {}
     for dataset, splits in data.items():
@@ -95,29 +92,16 @@ def remove_outlier_lengths(data, quantile: float=0.995):
     return throw_away_ixs
 
 
-from transformers import BertTokenizer, BertModel, BertForMaskedLM
-#                     Model          | Tokenizer          | Pretrained weights shortcut
-TRANSFORMER_MODELS = {'bert-base-uncased': (BertModel,       BertTokenizer,   'bert-base-uncased')}
+from transformers import BertTokenizer, BertModel
+
+#                                           Model     | Tokenizer   | Pretrained weights shortcut
+TRANSFORMER_MODELS = {'bert-base-uncased': (BertModel, BertTokenizer, 'bert-base-uncased')}
 TRANSFORMER_EMBEDDING_DIMS = {'bert-base-uncased': 768}
+
 
 # OPTIONAL: if you want to have more information on what's happening under the hood, activate the logger as follows
 # import logging
 # logging.basicConfig(level=logging.INFO)
-
-def get_embedding_dim(model_name):
-    """
-    Get embedding dim of transformer model.
-
-    Parameters
-    ----------
-    model_name: str
-        Name of model's embedding dim to fetch.
-
-    Returns
-    -------
-    embedding_dim, int
-    """
-    return TRANSFORMER_EMBEDDING_DIMS[model_name]
 
 
 def get_transformer(model_name):
@@ -138,11 +122,4 @@ def get_transformer(model_name):
                                         output_hidden_states=True)
     tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
 
-    return model, tokenizer, get_embedding_dim(model_name)
-
-
-def get_vocab(data):
-    """Not necessary if we use a pretrained model."""
-    return Vocabulary.from_instances([instance for splits in data.values()
-                                    for instance in splits['train']],
-                                     min_count={'tokens': min_count})
+    return model, tokenizer, TRANSFORMER_EMBEDDING_DIMS[model_name]

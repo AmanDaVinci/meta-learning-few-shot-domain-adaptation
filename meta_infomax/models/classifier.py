@@ -1,10 +1,15 @@
 import torch
 import torch.nn as nn
+from pip._internal.exceptions import ConfigurationError
 from typing import Union, List, Dict
 
 
+def accuracy(y_pred: torch.Tensor, y: torch.Tensor) -> float:
+    return (y_pred.argmax(dim=1) == y).float().mean().item()
+
+
 class Classifier(nn.Module):
-    
+
     def __init__(self, in_dim, hidden_dim, out_dim):
         super().__init__()
         self.layers = nn.Sequential(
@@ -12,7 +17,7 @@ class Classifier(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, out_dim)
         )
-        
+
     def forward(self, x):
         return self.layers(x)
 
@@ -38,13 +43,14 @@ class FeedForward(nn.Module):
         If given, we will apply this amount of dropout after each layer.  Semantics of `float`
         versus `List[float]` is the same as with other parameters.
     """
+
     def __init__(
-        self,
-        input_dim: int,
-        num_layers: int,
-        hidden_dims: Union[int, List[int]],
-        activations: Union['Activation', List['Activation']],
-        dropout: Union[float, List[float]] = 0.0,
+            self,
+            input_dim: int,
+            num_layers: int,
+            hidden_dims: Union[int, List[int]],
+            activations: Union['Activation', List['Activation']],
+            dropout: Union[float, List[float]] = 0.0,
     ) -> None:
 
         super().__init__()
@@ -85,38 +91,34 @@ class FeedForward(nn.Module):
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         output = inputs
-        for layer, activation, dropout in zip(
-            self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]
-        ):
+        for layer, activation, dropout in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
             output = dropout(activation(layer(output)))
+
         output = self._linear_layers[-1](output)
         return output
 
+
 class SentimentClassifier(nn.Module):
-    def __init__(self,
-                 text_encoder,
-                 classifier_feedforward,
-                ):
+    def __init__(self, encoder, head: FeedForward):
         """
         Parameters
         ----------
         """
         super().__init__()
-
-        self.text_encoder = text_encoder
+        self.encoder = encoder
+        self.head = head
         self.num_classes = 2
-        self.classifier_feedforward = classifier_feedforward
         self.criterion = torch.nn.CrossEntropyLoss()
 
     def forward(self,
-                text: Dict[str, torch.LongTensor],
-                label: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
+                text: torch.Tensor,
+                labels: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
         """
         Parameters
         ----------
-        text : Dict[str, Variable], required
+        text : torch.Tensor, required
             The output of ``TextField.as_array()``.
-        label : Variable, optional (default = None)
+        labels : Variable, optional (default = None)
             A variable representing the label for each instance in the batch.
             
         Returns
@@ -128,19 +130,17 @@ class SentimentClassifier(nn.Module):
         loss : torch.FloatTensor, optional
             A scalar loss to be optimised.
         """
-        encoded_text = self.text_encoder(text)[0][:,0] # todo: make abstraction model that
+        encoded_text = self.encoder(text)[0][:, 0]  # todo: make abstraction model that
 
-        logits = self.classifier_feedforward(encoded_text)
+        logits = self.head(encoded_text)
         output_dict = {'logits': logits}
 
-        if label is not None:
-            loss = self.criterion(logits, label)
-#             acc = accuracy(logits, label)
-            output_dict["loss"] = loss
-#             output_dict["acc"] = acc
+        if labels is not None:
+            output_dict["loss"] = self.criterion(logits, labels)
+            output_dict["acc"] = accuracy(logits, labels)
 
         return output_dict
-    
+
     def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
         Does a simple argmax over the class probabilities, converts indices to string labels, and
@@ -153,7 +153,6 @@ class SentimentClassifier(nn.Module):
         labels = -1 # TODO
         output_dict['label'] = labels
         return output_dict
-    
-    
+
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}

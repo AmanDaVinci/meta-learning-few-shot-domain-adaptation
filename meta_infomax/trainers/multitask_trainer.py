@@ -81,6 +81,7 @@ class MultitaskTrainer():
         print(f"Using device: {config['device']}")
         self.model.to(config['device'])
 
+        self.model.encoder_unfreeze_layers(layers=(10, 11))
         self.ffn_opt = optim.Adam(ffn.parameters())
         self.bert_opt = optim.AdamW(bert.parameters(), lr=2e-5)
 

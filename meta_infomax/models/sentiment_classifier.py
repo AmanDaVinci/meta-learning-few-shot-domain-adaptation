@@ -1,13 +1,13 @@
-
 import torch
 import torch.nn as nn
+from typing import Dict
+
 from meta_infomax.models.feed_forward import FeedForward
-from pip._internal.exceptions import ConfigurationError
-from typing import Union, List, Dict
 
 
 def accuracy(y_pred: torch.Tensor, y: torch.Tensor) -> float:
     return (y_pred.argmax(dim=1) == y).float().mean().item()
+
 
 class SentimentClassifier(nn.Module):
     def __init__(self, encoder, head: FeedForward):
@@ -64,6 +64,19 @@ class SentimentClassifier(nn.Module):
         labels = -1 # TODO
         output_dict['label'] = labels
         return output_dict
+
+    def encoder_unfreeze_layers(self, layers=(10, 11)):
+        for name, param in self.encoder.named_parameters():
+            if name.startswith(f"encoder"):
+                layer_index = int(name.split(".")[2])
+                if layer_index in layers:
+                    param.requires_grad_(True)
+                else:
+                    param.requires_grad_(False)
+            elif name.startswith(f"pooler"):
+                param.requires_grad_(True)
+            else:
+                param.requires_grad_(False)
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}

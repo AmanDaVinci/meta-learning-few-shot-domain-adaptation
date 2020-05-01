@@ -3,14 +3,12 @@ from sklearn.model_selection import train_test_split
 from torchtext.data import Field, LabelField, TabularDataset, Dataset
 from typing import List, Dict, Union
 
-DATA_DIR = Path("../data/mtl-dataset")
 DATASETS = ['apparel', 'baby', 'books', 'camera_photo', 'electronics',
             'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines',
             'music', 'software', 'sports_outdoors', 'toys_games', 'video']
-MODEL_NAME = 'bert-base-uncased'
 
 
-def get_fudan_datasets(tokenizer, datasets: List[str] = DATASETS, data_dir: Union[str, Path] = DATA_DIR,
+def get_fudan_datasets(tokenizer, data_dir: Union[str, Path], datasets: List[str] = DATASETS,
                        validation_size: float = 0.2, min_count: int = 0,
                        random_state: int = 11) -> Dict[str, Dict[str, List[Dataset]]]:
     """

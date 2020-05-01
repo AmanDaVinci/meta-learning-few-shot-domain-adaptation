@@ -1,7 +1,8 @@
 
 import torch
 import torch.nn as nn
-# from pip._internal.exceptions import ConfigurationError
+from meta_infomax.models.feed_forward import FeedForward
+from pip._internal.exceptions import ConfigurationError
 from typing import Union, List, Dict
 
 

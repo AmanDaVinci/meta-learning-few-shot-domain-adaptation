@@ -11,7 +11,8 @@ from torchtext.data import Field, LabelField, TabularDataset, Dataset
 from torch.utils.tensorboard import SummaryWriter
 
 from meta_infomax.datasets import utils, fudan_reviews
-from meta_infomax.models.classifier import FeedForward, SentimentClassifier
+from meta_infomax.models.sentiment_classifier import SentimentClassifier
+from meta_infomax.models.feed_forward import FeedForward
 
 RESULTS = Path("results")
 CHECKPOINTS = Path("checkpoints")

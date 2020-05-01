@@ -1,18 +1,15 @@
-import os
 from pathlib import Path
-from typing import Iterator, List, Dict, Union
-
-import torch
-import torchtext
 import numpy as np
+import torch
 import torch.nn as nn
 import torch.optim as optim
-from torchtext.data import Field, LabelField, TabularDataset, Dataset
+from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
+from typing import Dict
 
 from meta_infomax.datasets import utils, fudan_reviews
-from meta_infomax.models.sentiment_classifier import SentimentClassifier
 from meta_infomax.models.feed_forward import FeedForward
+from meta_infomax.models.sentiment_classifier import SentimentClassifier
 
 RESULTS = Path("results")
 CHECKPOINTS = Path("checkpoints")

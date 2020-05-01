@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
+from transformers import get_linear_schedule_with_warmup
 from typing import Dict
 
 from meta_infomax.datasets import utils, fudan_reviews
@@ -80,13 +81,15 @@ class MultitaskTrainer():
 
         self.model.encoder_unfreeze_layers(layers=(10, 11))
         self.ffn_opt = optim.Adam(ffn.parameters())
-        self.bert_opt = optim.AdamW(bert.parameters(), lr=2e-5)
+        self.bert_opt = optim.AdamW(bert.parameters(), lr=2e-5, correct_bias=False)
+        self.bert_scheduler = get_linear_schedule_with_warmup(self.bert_opt,
+                                                              num_warmup_steps=len(self.train_iter)/10,
+                                                              num_training_steps=len(self.train_iter))
 
         # Init trackers
         self.current_iter = 0
         self.current_epoch = 0
         self.best_accuracy = 0.
-        
 
     def run(self):
         """ Run the train-eval loop
@@ -150,11 +153,6 @@ class MultitaskTrainer():
         text = text.to(self.config['device'])
         label = label.to(self.config['device'])
 
-        # TODO: longer than 512 sequences not accepted by transformers
-        if text.shape[1] > 512:
-            results = {'accuracy': 0.0, 'loss': 0.0}
-            return results
-
         if training:
             self.bert_opt.zero_grad()
             self.ffn_opt.zero_grad()
@@ -162,7 +160,9 @@ class MultitaskTrainer():
             logits = output['logits']
             loss = output['loss']
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5)
             self.bert_opt.step()
+            self.bert_scheduler.step()
             self.ffn_opt.step()
         else:
             with torch.no_grad():

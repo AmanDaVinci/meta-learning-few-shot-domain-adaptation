@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import Dict
 
-from meta_infomax.models.feed_forward import FeedForward
+from .feed_forward import FeedForward
 
 
 def accuracy(y_pred: torch.Tensor, y: torch.Tensor) -> float:

@@ -37,10 +37,10 @@ def sample_domains(data: Dict[str, Dict[str, List[Dataset]]], n_samples: int = 5
 
     sampler = torch.utils.data.WeightedRandomSampler([1 / n_domains] * n_domains, num_samples=n_samples,
                                                      replacement=False)
-    return domains[list(sampler)]
+    return domains[list(sampler)].tolist()
 
 
-def get_iterators(data: Dict[str, Dict[str, Dataset]], split: str = 'train',
+def get_iterators(data: Dict[str, Dict[str, Dataset]], include_domains: List[str], split: str = 'train', 
                   collapse_domains: bool = False, batch_size: int = 64, device='cpu', **kwargs) -> Dict[str, 'Iterator']:
     """
     Generate iterators of each domain from split.
@@ -48,6 +48,7 @@ def get_iterators(data: Dict[str, Dict[str, Dataset]], split: str = 'train',
     Parameters
     ----------
     data: ``Dict[str, Dict[str, List[Dataset]]]`` contains all datasets.
+    include_domains: list of domains to include
     split: in {'train', 'val', 'test'}
     collapse_domains: bool
         If True, make one big iterator from all datasets. This means that different domains will be present
@@ -64,13 +65,16 @@ def get_iterators(data: Dict[str, Dict[str, Dataset]], split: str = 'train',
     iterators = {}
     if collapse_domains:
         # collect instances from `split` of every domain
-        all_examples = [example for domain, splits in data.items() for example in splits[split].examples]
+        all_examples = [example for domain, splits in data.items()\
+                                for example in splits[split].examples\
+                                if domain in include_domains]
         arbitrary_split_fields = list(data.values())[0][split].fields
         all_dataset = Dataset(all_examples, fields=arbitrary_split_fields)
         iterators['all'] = Iterator(all_dataset, batch_size=batch_size, device=device)
     else:
-        for dataset, splits in data.items():
-            iterators[dataset] = Iterator(splits[split], batch_size=batch_size, device=device)
+        for domain, splits in data.items():
+            if domain in include_domains:
+                iterators[domain] = Iterator(splits[split], batch_size=batch_size, device=device)
     return iterators
 
 

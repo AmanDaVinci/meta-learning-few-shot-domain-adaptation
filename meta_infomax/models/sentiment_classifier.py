@@ -66,6 +66,13 @@ class SentimentClassifier(nn.Module):
         return output_dict
 
     def encoder_unfreeze_layers(self, layers=(10, 11)):
+        """Make layer of a huggingface Transformer model require a gradient.
+        
+        Parameters
+        ---
+        layers: iterable[int]
+            Layers to unfreeze.
+        """
         for name, param in self.encoder.named_parameters():
             if name.startswith(f"encoder"):
                 layer_index = int(name.split(".")[2])

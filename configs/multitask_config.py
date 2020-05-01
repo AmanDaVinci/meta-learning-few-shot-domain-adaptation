@@ -1,0 +1,17 @@
+config = {
+    'exp_name': "multitask_test",
+    'epochs': 1,
+    'batch_size': 4,
+    'valid_freq': 50, 
+    'save_freq': 100,
+    'device': 'cpu',
+    'data_dir': 'data/mtl-dataset/',
+    'transformer_name': "bert-base-uncased",
+    'domains': ['apparel', 'baby', 'books', 'camera_photo', 'electronics',
+                'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines',
+                'music', 'software', 'sports_outdoors', 'toys_games', 'video'], 
+    'train_domains': ['apparel', 'baby', 'books', 'camera_photo', 'health_personal_care',
+                        'imdb', 'kitchen_housewares', 'magazines', 'sports_outdoors', 'toys_games'], 
+    'valid_domains': ['software', 'electronics'], 
+    'test_domains': ['music', 'video'],
+}

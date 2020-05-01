@@ -36,7 +36,8 @@ def get_fudan_datasets(tokenizer, data_dir: Union[str, Path], datasets: List[str
     data_dir = Path(data_dir)
     result = {}
 
-    text_field = Field(sequential=True, use_vocab=False, tokenize=tokenizer.encode, batch_first=True, include_lengths=True,
+    trunkated_encode = lambda x: tokenizer.encode(x, max_length=512)
+    text_field = Field(sequential=True, use_vocab=False, tokenize=trunkated_encode, batch_first=True, include_lengths=True,
                        pad_token=tokenizer.pad_token_id, unk_token=tokenizer.unk_token_id)
     label_field = LabelField(use_vocab=False)
     data_fields = [("label", label_field), ("text", text_field)]

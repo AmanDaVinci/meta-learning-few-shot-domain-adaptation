@@ -1,5 +1,5 @@
 import logging
-from base_config import base_config, get_config
+from .base_config import base_config, get_config
 
 new_config = {
     'exp_name': 'multitask_test',

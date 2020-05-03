@@ -27,8 +27,8 @@ base_config = {
     'log_level': logging.INFO
 }
 
-def get_config(base_config, config):
+def get_config(base_config, new_config):
     config = dict(base_config)
-    for key, value in config.items():
+    for key, value in new_config.items():
         config[key] = value
     return config

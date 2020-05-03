@@ -88,9 +88,6 @@ class EvaluationTrainer(BaseTrainer):
         """
         try:
             for i in range(self.config['n_evaluations']):
-                self.model.load_state_dict(self.model_state_dict) # we have to re init at every evaluation
-                self.bert_opt.load_state_dict(self.bert_opt_dict) # we have to re init at every evaluation
-                self.ffn_opt.load_state_dict(self.ffn_opt_dict) # we have to re init at every evaluation
                 logging.info(f"Begin evaluation {i + 1}/{self.config['n_evaluations']}")
                 self.evaluate()
         except KeyboardInterrupt:
@@ -103,6 +100,9 @@ class EvaluationTrainer(BaseTrainer):
         Train for a few steps on k samples for the 2 classes and evaluate on the test set.
         """
         for domain in self.config['test_domains']:
+            self.model.load_state_dict(self.model_state_dict) # we have to re init at every evaluation
+            self.bert_opt.load_state_dict(self.bert_opt_dict) # we have to re init at every evaluation
+            self.ffn_opt.load_state_dict(self.ffn_opt_dict) # we have to re init at every evaluation
             logging.info(f"Begin training on domain {domain} for {self.config['epochs']} epochs")
             self.train(domain)
             self.validate(domain)

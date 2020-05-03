@@ -1,80 +1,51 @@
-import numpy as np
 import torch
+import numpy as np
+from numpy.random import choice
+from torch.nn.utils.rnn import pad_sequence
 
 
-class MetaBatchSampler(object):
-    '''
-    MetaBatchSampler: yield a batch of indexes at each episode of a meta-learning iteration.
+class FudanMetaSampler(object):
+    ''' yields a batch of indexes for each episode of a meta-learning iteration '''
 
-    Indexes are calculated by keeping in account 'classes_per_it' and 'num_samples',
-    In fact at every iteration the batch indexes will refer to  'num_support' + 'num_query' samples
-    for 'classes_per_it' random classes.
-    __len__ returns the number of episodes per epoch (same as 'self.iterations').
-    '''
-
-    def __init__(self, labels, classes_per_it, num_samples, iterations):
-        '''
-        Initialize the MetaBatchSampler object
+    def __init__(self, labels: torch.Tensor, domains: torch.Tensor, n_classes: int, n_samples: int, n_episodes: int):
+        ''' Initialize the index matrix to sample episodes from
 
         Parameters
         ---
         labels:
-        an iterable containing all the labels for the current dataset
-        samples indexes will be infered from this iterable.
+        vector of sentiment labels
 
-        classes_per_it:
-        number of random classes for each iteration
+        domains:
+        vector of domains to sample each episode from
 
-        num_samples:
-        number of samples for each iteration for each class (support + query)
+        n_classes:
+        number of classes in one episode
 
-        iterations:
-        number of iterations (episodes) per epoch
+        n_samples:
+        number of samples from each class
+
+        n_episodes:
+        number of episodes per epoch
         '''
         super().__init__()
         self.labels = labels
-        self.classes_per_it = classes_per_it
-        self.sample_per_class = num_samples
-        self.iterations = iterations
+        self.domains = domains
+        self.n_classes = n_classes
+        self.n_samples = n_samples
+        self.n_episodes = n_episodes
 
-        self.classes, self.counts = np.unique(self.labels, return_counts=True)
-        self.classes = torch.LongTensor(self.classes)
-
-        # create a matrix, indexes, of dim: classes X max(elements per class)
-        # fill it with nans
-        # for every class c, fill the relative row with the indices samples belonging to c
-        # in numel_per_class we store the number of samples for each class/row
-        self.idxs = range(len(self.labels))
-        self.indexes = np.empty((len(self.classes), max(self.counts)), dtype=int) * np.nan
-        self.indexes = torch.Tensor(self.indexes)
-        self.numel_per_class = torch.zeros_like(self.classes)
-        for idx, label in enumerate(self.labels):
-            label_idx = np.argwhere(self.classes == label).item()
-            self.indexes[label_idx, np.where(np.isnan(self.indexes[label_idx]))[0][0]] = idx
-            self.numel_per_class[label_idx] += 1
+        # concatenate domains and labels to form unique classes
+        domain_label = np.array([str(domain.item())+str(label.item()) \
+                                for domain, label in zip(self.domains, self.labels)])
+        self.classes, self.class_counts = np.unique(domain_label, return_counts=True)
+        self.class_indexes = [np.where(domain_label == c)[0] for c in self.classes]
 
     def __iter__(self):
-        '''
-        yield a batch of indexes
-        '''
-        spc = self.sample_per_class
-        cpi = self.classes_per_it
-
-        for it in range(self.iterations):
-            batch_size = spc * cpi
-            batch = torch.LongTensor(batch_size)
-            c_idxs = torch.randperm(len(self.classes))[:cpi]
-            for i, c in enumerate(self.classes[c_idxs]):
-                s = slice(i * spc, (i + 1) * spc)
-                # FIXME when torch.argwhere will exists
-                label_idx = torch.arange(len(self.classes)).long()[self.classes == c].item()
-                sample_idxs = torch.randperm(self.numel_per_class[label_idx])[:spc]
-                batch[s] = self.indexes[label_idx][sample_idxs]
-            batch = batch[torch.randperm(len(batch))]
-            yield batch
+        ''' yield a batch of indexes '''
+        for i in range(self.n_episodes):
+            sampled_classes = choice(len(self.classes), size=self.n_classes)
+            batch = [choice(self.class_indexes[c], size=self.n_samples) for c in sampled_classes]
+            yield torch.tensor(batch).flatten()
 
     def __len__(self):
-        '''
-        returns the number of iterations (episodes) per epoch
-        '''
-        return self.iterations
+        return self.n_episodes

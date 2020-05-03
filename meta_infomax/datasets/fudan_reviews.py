@@ -17,7 +17,6 @@ pd.options.mode.chained_assignment = None # ignore annoying pandas warnings
 DATASETS = ['apparel', 'baby', 'books', 'camera_photo', 'electronics',
             'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines',
             'music', 'software', 'sports_outdoors', 'toys_games', 'video']
-
     
 class SingleTaskDataset(Dataset):
     def __init__(self, data):
@@ -33,7 +32,7 @@ class SingleTaskDataset(Dataset):
 
 class MultiTaskDataset(Dataset):
     def __init__(self, tokenizer, data_dir='data/mtl-dataset/', split: str='train', collapse_domains: bool=True,
-                 datasets: List[str] = DATASETS, validation_size: float = 0.2, min_count: int = 0,
+                 keep_datasets: List[str] = DATASETS, validation_size: float = 0.2, min_count: int = 0,
                  random_state: int = 42, load: bool=True, save: bool=True):
         """
         Dataset class for multi task learning.
@@ -45,14 +44,16 @@ class MultiTaskDataset(Dataset):
         ---
         tokenizer: huggingface bert tokenizer
         data_dir: Union[str, Path]
-            Directory for Fudan data.
-        split: str in {'train', 'val', 'test'}
+            Directory for Fudan valdata.
+        split: str in {'train', 'val', 'test', 'all'}
             Indicate which datasplit we want. This is not a split over domain, but over samples.
         collapse_domains: bool. Not used at the moment, since we have methods to return individual domains anyway.
             If True, make one big iterator from all datasets. This means that different domains will be present
             in the same batch.
-        datasets:
-            Specify domain such as ['apparel', 'baby'].
+        keep_datasets: List[str]
+            Which domains to keep in memory. Specify domain such as ['apparel', 'baby'].
+            By default, all known datasets (found in DATASETS) are read in and tokenized, so that
+            we can save them and not have to tokenize again. We then filter on keep_datasets.
         validation_size: should be in [0, 1].
             Fraction of validation samples in train set.
         min_count: NOT IMPLEMENTED
@@ -65,20 +66,24 @@ class MultiTaskDataset(Dataset):
         save:
             Whether to save processed data to a file. Currently always saves to data_dir / 'processed_data.pt'
         """
+        assert split in ('train', 'val', 'test', 'all'), 'provide correct data split'
         self.data_dir = Path(data_dir)
         self.split = split
         self.collapse_domains = collapse_domains
-        self.datasets = datasets
+        self.keep_datasets = keep_datasets
         self.random_state = random_state
         # load and process data
-        store_processed = self.data_dir / 'processed_data.pt'
+        store_processed = self.data_dir / (self.split + f'_random-{random_state}' + f'_valsize-{validation_size}' + '_processed_data.pt')
         if store_processed.exists() and load:
+            logging.info(f'loading data from file: {store_processed}')
             self.data = torch.load(store_processed)
         else:
             self.data = self._read_datasets(validation_size=validation_size)
             self.data['tokenized'] = self._tokenize_data(self.data['text'], tokenizer)
             if save:
                 torch.save(self.data, store_processed)
+        # filter rows with domain in keep_datasets
+        self.data = self.data.loc[self.data['domain'].isin(keep_datasets), :].reset_index(drop=True)
         self.collator = MultiTaskCollator(tokenizer)
         
     def _read_datasets(self, validation_size=0.2):
@@ -98,21 +103,27 @@ class MultiTaskDataset(Dataset):
         col_names=['label', 'text']
         if not self.data_dir.exists():
             download_and_extract_fudan(self.data_dir)
-        for idx, dataset in enumerate(self.datasets):
+        for idx, dataset in enumerate(DATASETS):
             logging.info(f'processing dataset: {dataset}')
             train_set, val_set, test_set = None, None, None
-            if self.split in ('train', 'val'):
+            if self.split in ('train', 'val', 'all'):
                 train_file = dataset + '.task.train'
                 train_val_set = pd.read_csv(self.data_dir / train_file, sep='\t', header=None, names=col_names)
-                train_set, val_set = train_test_split(train_val_set, test_size=validation_size,
+                if validation_size == 0: # only do split when validation_size > 0
+                    train_set = train_val_set
+                else:
+                    train_set, val_set = train_test_split(train_val_set, test_size=validation_size,
                                                                 random_state=self.random_state)
+                    val_set['domain'] = dataset
                 train_set['domain'] = dataset # record which domain it is in dataframe
-                val_set['domain'] = dataset
-            else:
+            elif self.split in ('test', 'all'):
                 test_file = dataset + '.task.test'
                 test_set = pd.read_csv(self.data_dir / test_file, sep='\t', header=None, names=col_names)
                 test_set['domain'] = dataset
-            dfs.append({'train': train_set, 'val': val_set, 'test': test_set}[self.split])
+            if self.split == 'all':
+                dfs.extend([train_set, val_set, test_set])
+            else:
+                dfs.append({'train': train_set, 'val': val_set, 'test': test_set}[self.split])
         return pd.concat(dfs, ignore_index=True).dropna().reset_index(drop=True) # ignore nan values
     
     def _tokenize_data(self, texts, tokenizer):
@@ -153,6 +164,7 @@ class MultiTaskDataset(Dataset):
         ---
         SingleTaskDataset for the given domain
         """
+        assert domain in self.keep_datasets, 'ensure domain is present in data'
         return SingleTaskDataset(self.data[self.data.domain == domain].reset_index(drop=True))
     
     def domain_datasets(self, domains):
@@ -170,18 +182,19 @@ class MultiTaskDataset(Dataset):
         """
         result = {}
         for domain in domains:
-            assert domain in self.datasets, 'make sure domain is in available domains.'
+            assert domain in self.keep_datasets, 'make sure domain is in available domains.'
             result[domain] = self.get_domain(domain)
         return result
             
-    def domain_dataloaders(self, domains, **kwargs):
+    def domain_dataloaders(self, domains=None, **kwargs):
         """
         Create dataloaders for each domain given in domains.
         
         Parameters
         ---
         domains : List[str]
-            Domains for which we want datasets.
+            Domains for which we want datasets. If not provided, default to all datasets provided in
+            keep_datasets.
         kwargs: keyword arguments for DataLoader.
             
         Returns
@@ -189,9 +202,11 @@ class MultiTaskDataset(Dataset):
         Dict[str, DataLoader]
         """
         result = {}
+        if domains is None:
+            domains = self.keep_datasets
         domain_datasets = self.domain_datasets(domains)
         for domain in domains:
-            assert domain in self.datasets, 'make sure domain is in available domains.'
+            assert domain in self.keep_datasets, 'make sure domain is in available domains.'
             result[domain] = DataLoader(domain_datasets[domain], **kwargs)
         return result
     
@@ -244,7 +259,7 @@ class MultiTaskCollator:
 
             input_ids.append(input_dict['input_ids'])
             attention_masks.append(input_dict['attention_mask'])
-        return {'x': torch.tensor(input_ids), 'masks': torch.tensor(attention_masks), 'labels': labels,
+        return {'x': torch.tensor(input_ids), 'masks': torch.tensor(attention_masks), 'labels': torch.tensor(labels),
                'domains': domains}
 
 def download_and_extract_fudan(data_dir):

@@ -7,6 +7,7 @@ import urllib.request
 import tarfile
 import os
 from pathlib import Path
+import logging
 
 DATASETS = ['apparel', 'baby', 'books', 'camera_photo', 'electronics',
             'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines',
@@ -46,8 +47,8 @@ def get_fudan_datasets(tokenizer, data_dir: Union[str, Path], datasets: List[str
 
     result = {}
 
-    trunkated_encode = lambda x: tokenizer.encode(x, max_length=512)
-    text_field = Field(sequential=True, use_vocab=False, tokenize=trunkated_encode, batch_first=True, include_lengths=True,
+    truncated_encode = lambda x: tokenizer.encode(x, max_length=512)
+    text_field = Field(sequential=True, use_vocab=False, tokenize=truncated_encode, batch_first=True, include_lengths=True,
                        pad_token=tokenizer.pad_token_id, unk_token=tokenizer.unk_token_id)
     label_field = LabelField(use_vocab=False)
     data_fields = [("label", label_field), ("text", text_field)]
@@ -81,11 +82,21 @@ def download_and_extract_fudan(data_dir):
     data_dir:
         Directory of fudan datasets.
     """
-    print("Downloading data...")
+    logging.info(f'Downloading data to {data_dir}..')
+    data_dir = Path(data_dir)
+    if data_dir.exists():
+        logging.info('data directory already exists, stopping download.')
+        return
+    data_dir.mkdir(parents=True)
     data_url = "https://github.com/FrankWork/fudan_mtl_reviews/raw/master/data/fudan-mtl-dataset.tar.gz"
+
     tar_filename = data_dir / "fudan-mtl-dataset.tar.gz"
     with urllib.request.urlopen(data_url) as response, open(tar_filename, 'wb') as out_file:
         shutil.copyfileobj(response, out_file)
     with tarfile.open(tar_filename, 'r:gz') as tar_file:
         tar_file.extractall(data_dir)
     os.remove(tar_filename)
+    for path in (data_dir / 'mtl-dataset').glob('*'):
+        shutil.move(path.as_posix(), data_dir.as_posix())
+    (data_dir / 'mtl-dataset').rmdir()
+

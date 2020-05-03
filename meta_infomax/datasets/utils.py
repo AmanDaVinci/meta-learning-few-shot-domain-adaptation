@@ -131,10 +131,10 @@ def get_transformer(model_name):
     return model, tokenizer, TRANSFORMER_EMBEDDING_DIMS[model_name]
 
 
-def init_logging(log_path=LOG_PATH):
+def init_logging(log_path=LOG_PATH, log_level=logging.DEBUG):
     """Initialize logger."""
     log_path = Path(log_path)
-    logging.basicConfig(level=logging.DEBUG) # minimum log level is set to INFO
+    logging.basicConfig(level=log_level) # set minimum log level
     # format how the log will be printed. Some parameters are already defined in LogRecord like asctime used below
     # more info at https://docs.python.org/3/library/logging.html#logrecord-attributes
     logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
@@ -143,7 +143,7 @@ def init_logging(log_path=LOG_PATH):
     # FileHandler created with log file path.
     # TODO: log file name adaptive to experiment
     log_path.mkdir(exist_ok=True, parents=True)
-    fileHandler = logging.FileHandler('{0}/{1}.log'.format(log_path, 'log'))
+    fileHandler = logging.FileHandler('{0}/{1}.log'.format(log_path, 'logs'))
     fileHandler.setFormatter(logFormatter)
     rootLogger.addHandler(fileHandler)
 

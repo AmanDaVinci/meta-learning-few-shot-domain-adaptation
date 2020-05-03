@@ -51,6 +51,9 @@ class EvaluationTrainer(BaseTrainer):
         """
         # TODO: Load checkpoint
         super().__init__(config)
+        self.model_state_dict = self.model.state_dict() # we have to re init at every evaluation
+        self.bert_opt_dict = self.bert_opt.state_dict()
+        self.ffn_opt_dict = self.ffn_opt.state_dict()
         # for now, we say that the training data, is the train split of every train domain
         # we could eventually also include the test split of the train_domain
         train_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
@@ -85,6 +88,9 @@ class EvaluationTrainer(BaseTrainer):
         """
         try:
             for i in range(self.config['n_evaluations']):
+                self.model.load_state_dict(self.model_state_dict) # we have to re init at every evaluation
+                self.bert_opt.load_state_dict(self.bert_opt_dict) # we have to re init at every evaluation
+                self.ffn_opt.load_state_dict(self.ffn_opt_dict) # we have to re init at every evaluation
                 logging.info(f"Begin evaluation {i + 1}/{self.config['n_evaluations']}")
                 self.evaluate()
         except KeyboardInterrupt:

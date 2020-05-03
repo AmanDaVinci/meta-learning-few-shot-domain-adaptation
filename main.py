@@ -2,10 +2,12 @@ import argparse
 import importlib
 from meta_infomax.trainers.multitask_trainer import MultitaskTrainer
 from meta_infomax.trainers.maml_trainer import MAMLTrainer
+from meta_infomax.trainers.evaluation_trainer import EvaluationTrainer
 
 MULTITASK_TRAINER = 'multitask'
 MAML_TRAINER = 'maml'
 PROTOTYPICAL_TRAINER = 'prototypical'
+EVALUATION_TRAINER = 'evaluation'
 
 def main():
     """ Runs the trainer based on the given experiment configuration """
@@ -19,7 +21,7 @@ def main():
 
     config_module = importlib.import_module(args.config)
     trainer_type = config_module.config['trainer']
-    assert trainer_type in (MULTITASK_TRAINER, MAML_TRAINER, PROTOTYPICAL_TRAINER),\
+    assert trainer_type in (MULTITASK_TRAINER, MAML_TRAINER, PROTOTYPICAL_TRAINER, EVALUATION_TRAINER),\
         'Make sure you have specified a correct trainer.'
     if trainer_type == MULTITASK_TRAINER:
         trainer = MultitaskTrainer(config_module.config)
@@ -27,6 +29,8 @@ def main():
         trainer = MAMLTrainer(config_module.config)
     elif trainer_type == PROTOTYPICAL_TRAINER:
         pass # ProtoTrainer(config_module.config)
+    elif trainer_type == EVALUATION_TRAINER:
+        trainer = EvaluationTrainer(config_module.config)
     if args.train:
         trainer.run()
     # if args.test:

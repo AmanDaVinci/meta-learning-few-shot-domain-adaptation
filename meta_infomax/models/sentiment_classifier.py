@@ -1,36 +1,59 @@
 import torch
 import torch.nn as nn
-from typing import Dict
+from typing import Dict, List
 
 from meta_infomax.models.feed_forward import FeedForward
 
 
 def accuracy(y_pred: torch.Tensor, y: torch.Tensor) -> float:
-    return (y_pred.argmax(dim=1) == y).float().mean().item()
+    """
+    Return predictive accuracy.
+
+    Parameters
+    ---
+    y_pred: torch.Tensor (BATCH, NUM_CLASS)
+        Predicted values.
+    y: torch.Tensor (BATCH,)
+        Real class values.
+    """
+    return (y_pred.argmax(dim = 1) == y).float().mean().item()
 
 
 class SentimentClassifier(nn.Module):
-    def __init__(self, encoder, head: FeedForward):
+    def __init__(self, encoder, head: FeedForward, pooler=None):
         """
         Parameters
         ----------
+        encoder: Transformer model
+        head: FeedForward
+            Classifier on top of encoder.
+        pooler: function, optional
+            Takes output of BERT model and returns a sentence embedding. Default takes the embedding of
+            the CLS token.
         """
         super().__init__()
         self.encoder = encoder
         self.head = head
         self.num_classes = 2
         self.criterion = torch.nn.CrossEntropyLoss()
+        self.pooler = pooler if pooler is not None else lambda x: x[0][:,0] # get CLS embedding for each sentence in batch
 
     def forward(self,
-                text: torch.Tensor,
-                labels: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
+                x: torch.Tensor,
+                masks: torch.Tensor = None,
+                labels: torch.LongTensor = None,
+                domains: List[str]=None) -> Dict[str, torch.Tensor]:
         """
         Parameters
         ----------
-        text : torch.Tensor, required
-            The output of ``TextField.as_array()``.
+        x : torch.Tensor, (BATCH, max_seq_len), required
+            Input ids of words. They are already encoded, batched, padded, and special tokens added. 
+        masks: torch.Tensor (BATCH, max_seq_len), optional
+            Array where values indicate whether the transformer should consider this token or not.
         labels : Variable, optional (default = None)
             A variable representing the label for each instance in the batch.
+        domains: List[str]
+            Domain of each sample in batch.
             
         Returns
         -------
@@ -41,9 +64,13 @@ class SentimentClassifier(nn.Module):
         loss : torch.FloatTensor, optional
             A scalar loss to be optimised.
         """
-        encoded_text = self.encoder(text)[0][:, 0]  # todo: make abstraction model that
+        if masks is None:
+            # if masks not provided, we don't mask any observation
+            masks = torch.ones_like(x)
+        encoded_text = self.encoder(input_ids=x, attention_mask=masks)
+        sentence_embedding = self.pooler(encoded_text)
 
-        logits = self.head(encoded_text)
+        logits = self.head(sentence_embedding)
         output_dict = {'logits': logits}
 
         if labels is not None:
@@ -66,6 +93,13 @@ class SentimentClassifier(nn.Module):
         return output_dict
 
     def encoder_unfreeze_layers(self, layers=(10, 11)):
+        """Make layer of a huggingface Transformer model require a gradient.
+        
+        Parameters
+        ---
+        layers: iterable(int)
+            Layers to unfreeze.
+        """
         for name, param in self.encoder.named_parameters():
             if name.startswith(f"encoder"):
                 layer_index = int(name.split(".")[2])

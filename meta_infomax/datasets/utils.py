@@ -7,8 +7,10 @@ import torch
 from pathlib import Path
 from torchtext.data import Dataset, Iterator
 from typing import List, Dict
+import logging
 
 GLOVE_DIR = Path("../data/glove")
+LOG_PATH = Path('logs')
 
 
 def sample_domains(data: Dict[str, Dict[str, List[Dataset]]], n_samples: int = 5, strategy: str = 'uniform') -> np.ndarray:
@@ -127,3 +129,25 @@ def get_transformer(model_name):
     tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
 
     return model, tokenizer, TRANSFORMER_EMBEDDING_DIMS[model_name]
+
+
+def init_logging(log_path=LOG_PATH, log_level=logging.DEBUG):
+    """Initialize logger."""
+    log_path = Path(log_path)
+    logging.basicConfig(level=log_level) # set minimum log level
+    # format how the log will be printed. Some parameters are already defined in LogRecord like asctime used below
+    # more info at https://docs.python.org/3/library/logging.html#logrecord-attributes
+    logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+    rootLogger = logging.getLogger()
+
+    # FileHandler created with log file path.
+    # TODO: log file name adaptive to experiment
+    log_path.mkdir(exist_ok=True, parents=True)
+    fileHandler = logging.FileHandler('{0}/{1}.log'.format(log_path, 'logs'))
+    fileHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(fileHandler)
+
+    # This allows logs to be printed on console as well.
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(consoleHandler)

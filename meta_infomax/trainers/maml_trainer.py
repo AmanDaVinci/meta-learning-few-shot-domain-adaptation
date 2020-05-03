@@ -7,22 +7,22 @@ from pathlib import Path
 from typing import Dict
 
 
-from meta_infomax.trainers.super_trainer import TrainerParent
+from meta_infomax.trainers.super_trainer import BaseTrainer
 
 
-class MAMLTrainer(TrainerParent):
+class MAMLTrainer(BaseTrainer):
     """Train to classify sentiment across different domains/tasks"""
 
     def __init__(self, config: Dict):
-        super().__init__(config, collapse_domains=False)
+        super().__init__(config)
 
     def train(self):
         """ Main training loop """
         for epoch in range(self.current_epoch, self.config['epochs']):
             self.current_epoch = epoch
-            print("chacking domains")
-            print(self.train_iter.keys())
-            for i, batch in enumerate(self.train_iter['all']):
+            print("checking domains")
+            print(self.train_loader.keys())
+            for i, batch in enumerate(self.train_loader):
                 self.current_iter += 1
                 results = self._batch_iteration(batch, training=True)
                 
@@ -42,7 +42,7 @@ class MAMLTrainer(TrainerParent):
 
         print("Begin evaluation over validation set")
         with torch.no_grad():
-            for i, batch in enumerate(self.valid_iter['all']):
+            for i, batch in enumerate(self.valid_iter):
                 results = self._batch_iteration(batch, training=False)
                 self.writer.add_scalar('Accuracy/Valid', results['accuracy'], self.current_iter)
                 self.writer.add_scalar('Loss/Valid', results['loss'], self.current_iter)

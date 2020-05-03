@@ -1,12 +1,22 @@
 import torch
 import torch.nn as nn
-from typing import Dict
+from typing import Dict, List
 
 from meta_infomax.models.feed_forward import FeedForward
 
 
 def accuracy(y_pred: torch.Tensor, y: torch.Tensor) -> float:
-    return (y_pred.argmax(dim=1) == y).float().mean().item()
+    """
+    Return predictive accuracy.
+
+    Parameters
+    ---
+    y_pred: torch.Tensor (BATCH, NUM_CLASS)
+        Predicted values.
+    y: torch.Tensor (BATCH,)
+        Real class values.
+    """
+    return (y_pred.argmax(dim = 1) == y).float().mean().item()
 
 
 class SentimentClassifier(nn.Module):
@@ -32,16 +42,18 @@ class SentimentClassifier(nn.Module):
                 x: torch.Tensor,
                 masks: torch.Tensor = None,
                 labels: torch.LongTensor = None,
-                domains: List[str]) -> Dict[str, torch.Tensor]:
+                domains: List[str]=None) -> Dict[str, torch.Tensor]:
         """
         Parameters
         ----------
         x : torch.Tensor, (BATCH, max_seq_len), required
             Input ids of words. They are already encoded, batched, padded, and special tokens added. 
-        text : torch.Tensor, required
-            The output of ``TextField.as_array()``.
+        masks: torch.Tensor (BATCH, max_seq_len), optional
+            Array where values indicate whether the transformer should consider this token or not.
         labels : Variable, optional (default = None)
             A variable representing the label for each instance in the batch.
+        domains: List[str]
+            Domain of each sample in batch.
             
         Returns
         -------
@@ -58,7 +70,7 @@ class SentimentClassifier(nn.Module):
         encoded_text = self.encoder(input_ids=x, attention_mask=masks)
         sentence_embedding = self.pooler(encoded_text)
 
-        logits = self.head(encoded_text)
+        logits = self.head(sentence_embedding)
         output_dict = {'logits': logits}
 
         if labels is not None:

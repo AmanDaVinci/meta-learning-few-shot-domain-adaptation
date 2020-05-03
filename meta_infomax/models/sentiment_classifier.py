@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import Dict
 
-from .feed_forward import FeedForward
+from meta_infomax.models.feed_forward import FeedForward
 
 
 def accuracy(y_pred: torch.Tensor, y: torch.Tensor) -> float:
@@ -10,23 +10,34 @@ def accuracy(y_pred: torch.Tensor, y: torch.Tensor) -> float:
 
 
 class SentimentClassifier(nn.Module):
-    def __init__(self, encoder, head: FeedForward):
+    def __init__(self, encoder, head: FeedForward, pooler=None):
         """
         Parameters
         ----------
+        encoder: Transformer model
+        head: FeedForward
+            Classifier on top of encoder.
+        pooler: function, optional
+            Takes output of BERT model and returns a sentence embedding. Default takes the embedding of
+            the CLS token.
         """
         super().__init__()
         self.encoder = encoder
         self.head = head
         self.num_classes = 2
         self.criterion = torch.nn.CrossEntropyLoss()
+        self.pooler = pooler if pooler is not None else lambda x: x[0][:,0] # get CLS embedding for each sentence in batch
 
     def forward(self,
-                text: torch.Tensor,
-                labels: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
+                x: torch.Tensor,
+                masks: torch.Tensor = None,
+                labels: torch.LongTensor = None,
+                domains: List[str]) -> Dict[str, torch.Tensor]:
         """
         Parameters
         ----------
+        x : torch.Tensor, (BATCH, max_seq_len), required
+            Input ids of words. They are already encoded, batched, padded, and special tokens added. 
         text : torch.Tensor, required
             The output of ``TextField.as_array()``.
         labels : Variable, optional (default = None)
@@ -41,7 +52,11 @@ class SentimentClassifier(nn.Module):
         loss : torch.FloatTensor, optional
             A scalar loss to be optimised.
         """
-        encoded_text = self.encoder(text)[0][:, 0]  # todo: make abstraction model that
+        if masks is None:
+            # if masks not provided, we don't mask any observation
+            masks = torch.ones_like(x)
+        encoded_text = self.encoder(input_ids=x, attention_mask=masks)
+        sentence_embedding = self.pooler(encoded_text)
 
         logits = self.head(encoded_text)
         output_dict = {'logits': logits}
@@ -70,7 +85,7 @@ class SentimentClassifier(nn.Module):
         
         Parameters
         ---
-        layers: iterable[int]
+        layers: iterable(int)
             Layers to unfreeze.
         """
         for name, param in self.encoder.named_parameters():

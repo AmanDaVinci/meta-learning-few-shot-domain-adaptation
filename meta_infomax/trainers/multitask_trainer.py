@@ -95,15 +95,16 @@ class MultitaskTrainer(BaseTrainer):
         with torch.no_grad():
             for i, batch in enumerate(tqdm(self.val_loader)):
                 results = self._batch_iteration(batch, training=False)
-                self.writer.add_scalar('Accuracy/Valid', results['accuracy'], self.current_iter)
-                self.writer.add_scalar('Loss/Valid', results['loss'], self.current_iter)
                 losses.append(results['loss'])
                 accuracies.append(results['accuracy'])
             
         mean_accuracy = np.mean(accuracies)
+        mean_loss = np.mean(losses)
         if mean_accuracy > self.best_accuracy:
             self.best_accuracy = mean_accuracy
             self.save_checkpoint(self.BEST_MODEL_FNAME)
+        self.writer.add_scalar('Accuracy/Valid', mean_accuracy, self.current_iter)
+        self.writer.add_scalar('Loss/Valid', mean_loss, self.current_iter)
         
         report = (f"[Validation]\t"
                   f"Accuracy: {mean_accuracy:.3f} "

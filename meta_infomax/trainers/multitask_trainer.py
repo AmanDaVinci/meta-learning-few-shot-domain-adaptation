@@ -17,13 +17,10 @@ from meta_infomax.datasets import utils
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
 
 
-RESULTS = Path("results")
-CHECKPOINTS = Path("checkpoints")
-LOG_DIR = Path("logs")
-BEST_MODEL_FNAME = "best-model.pt"
+from meta_infomax.trainers.super_trainer import BaseTrainer
 
 
-class MultitaskTrainer():
+class MultitaskTrainer(BaseTrainer):
     """Train to classify sentiment across different domains/tasks"""
 
     def __init__(self, config: Dict):
@@ -51,76 +48,7 @@ class MultitaskTrainer():
                 'test_domains': ['music', 'video'],
             }
         """
-        self.config = config
-
-        self.checkpoint_dir = CHECKPOINTS / config['exp_name']
-        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-
-        self.exp_dir = RESULTS / config['exp_name']
-        self.exp_dir.mkdir(parents=True, exist_ok=True)
-        self.log_dir = self.exp_dir / LOG_DIR
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-        self.writer = SummaryWriter(log_dir=self.log_dir)
-        utils.init_logging(log_path=self.log_dir, log_level=config['log_level']) # initialize logging
-        logging.info(f'Config Setting:\n{config}')
-
-        # TODO: set dropout
-        bert, tokenizer, embedding_dim = utils.get_transformer(config['transformer_name'])
-
-        # for now, we say that the training data, is the train split of every train domain
-        # we could eventually also include the test split of the train_domain
-        train_data = MultiTaskDataset(tokenizer=tokenizer, data_dir=config['data_dir'], split='train',
-                        keep_datasets=config['train_domains'],
-                        random_state=config['random_state'], validation_size=0)
-        val_data = MultiTaskDataset(tokenizer=tokenizer, data_dir=config['data_dir'], split='train',
-                        keep_datasets=config['val_domains'],
-                        random_state=config['random_state'], validation_size=0)
-        test_data = MultiTaskDataset(tokenizer=tokenizer, data_dir=config['data_dir'], split='train',
-                        keep_datasets=config['test_domains'],
-                        random_state=config['random_state'], validation_size=0)
-
-        # logging.info('Data summary\n' + '-' * 12)
-        # for domain in config['domains']:
-        #     summary = f"{domain} -- Train: {len(train_data.get_domain(domain))} Val: {len(val_data.get_domain(domain))} Test: {len(test_data.get_domain(domain))}"
-        #     logging.info(summary)
-
-        if config['collapse_domains']:
-            self.train_loader = DataLoader(train_data, batch_size=config['batch_size'],
-                                           collate_fn=train_data.collator, shuffle=True)
-            self.val_loader = DataLoader(val_data, batch_size=config['batch_size'],
-                                           collate_fn=train_data.collator, shuffle=False)
-            self.test_loader = DataLoader(test_data, batch_size=config['batch_size'],
-                                           collate_fn=train_data.collator, shuffle=False)
-        else:
-            # loaders are now dicts mapping from domains to individual loaders
-            self.train_loader = train_data.domain_dataloaders(batch_size=config['batch_size'], collate_fn=train_data.collator,
-                                                            shuffle=True)
-            self.val_loader = val_data.domain_dataloaders(batch_size=config['batch_size'], collate_fn=val_data.collator,
-                                                            shuffle=False)
-            self.test_loader = test_data.domain_dataloaders(batch_size=config['batch_size'], collate_fn=test_data.collator,
-                                                            shuffle=False)
-
-        # TODO: parameterize feedforward from config
-        # TODO: initialize with sampling from a normal distribution with mean 0 and standard deviation 0.02
-        ffn = FeedForward(768, 3, [512, 256, 2], activations=nn.ReLU())
-        self.model = SentimentClassifier(bert, ffn)
-        logging.info(f"Using device: {config['device']}")
-        self.model.to(config['device'])
-
-        self.model.encoder_unfreeze_layers(layers=config['unfreeze_layers'])
-        self.ffn_opt = optim.Adam(ffn.parameters())
-        # self.bert_opt = optim.AdamW(bert.parameters(), lr=2e-5, correct_bias=False)
-        self.bert_opt = AdamW(bert.parameters(), lr=config['lr'], correct_bias=False,
-                            weight_decay=config['weight_decay']) # use transformers AdamW
-        self.bert_scheduler = get_linear_schedule_with_warmup(self.bert_opt,
-                                                              num_warmup_steps=config['warmup_steps'],
-                                                              num_training_steps=len(self.train_loader) *
-                                                              config['epochs'])
-
-        # Init trackers
-        self.current_iter = 0
-        self.current_epoch = 0
-        self.best_accuracy = 0.
+        super().__init__(config)
 
     def run(self):
         """ Run the train-eval loop
@@ -175,7 +103,7 @@ class MultitaskTrainer():
         mean_accuracy = np.mean(accuracies)
         if mean_accuracy > self.best_accuracy:
             self.best_accuracy = mean_accuracy
-            self.save_checkpoint(BEST_MODEL_FNAME)
+            self.save_checkpoint(self.BEST_MODEL_FNAME)
         
         report = (f"[Validation]\t"
                   f"Accuracy: {mean_accuracy:.3f} "
@@ -210,26 +138,3 @@ class MultitaskTrainer():
 
         results = {'accuracy': output['acc'], 'loss': loss.item()}
         return results
-
-    def save_checkpoint(self, file_name: str = None):
-        """Save checkpoint in the checkpoint directory.
-
-        Checkpoint directory and checkpoint file need to be specified in the configs.
-
-        Parameters
-        ----------
-        file_name: str
-            Name of the checkpoint file.
-        """
-        if file_name is None:
-            file_name = f"Epoch[{self.current_epoch}]-Step[{self.current_iter}].pt"
-
-        file_name = self.checkpoint_dir / file_name
-        state = {
-            'epoch': self.current_epoch,
-            'iter': self.current_iter,
-            'best_accuracy': self.best_accuracy,
-            'model_state': self.model.state_dict(),
-        }
-        torch.save(state, file_name)
-        print(f"Checkpoint saved @ {file_name}")

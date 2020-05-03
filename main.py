@@ -1,6 +1,7 @@
 import argparse
 import importlib
 from meta_infomax.trainers.multitask_trainer import MultitaskTrainer
+from meta_infomax.trainers.maml_trainer import MAMLTrainer
 
 MULTITASK_TRAINER = 'multitask'
 MAML_TRAINER = 'maml'
@@ -23,7 +24,7 @@ def main():
     if trainer_type == MULTITASK_TRAINER:
         trainer = MultitaskTrainer(config_module.config)
     elif trainer_type == MAML_TRAINER:
-        pass # MAMLTrainer(config_module.config)
+        trainer = MAMLTrainer(config_module.config)
     elif trainer_type == PROTOTYPICAL_TRAINER:
         pass # ProtoTrainer(config_module.config)
     if args.train:

@@ -10,16 +10,18 @@ from typing import Dict
 from meta_infomax.trainers.super_trainer import TrainerParent
 
 
-class MultitaskTrainer(TrainerParent):
+class MAMLTrainer(TrainerParent):
     """Train to classify sentiment across different domains/tasks"""
 
     def __init__(self, config: Dict):
-        super().__init__(config, collapse_domains=True)
+        super().__init__(config, collapse_domains=False)
 
     def train(self):
         """ Main training loop """
         for epoch in range(self.current_epoch, self.config['epochs']):
             self.current_epoch = epoch
+            print("chacking domains")
+            print(self.train_iter.keys())
             for i, batch in enumerate(self.train_iter['all']):
                 self.current_iter += 1
                 results = self._batch_iteration(batch, training=True)
@@ -50,7 +52,7 @@ class MultitaskTrainer(TrainerParent):
         mean_accuracy = np.mean(accuracies)
         if mean_accuracy > self.best_accuracy:
             self.best_accuracy = mean_accuracy
-            self.save_checkpoint(self.BEST_MODEL_FNAME)
+            self.save_checkpoint(BEST_MODEL_FNAME)
         
         report = (f"[Validation]\t"
                   f"Accuracy: {mean_accuracy:.3f} "

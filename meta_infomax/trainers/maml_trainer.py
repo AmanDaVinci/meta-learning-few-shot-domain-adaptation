@@ -16,6 +16,39 @@ class MAMLTrainer(BaseTrainer):
     def __init__(self, config: Dict):
         super().__init__(config)
 
+        # for now, we say that the training data, is the train split of every train domain
+        # we could eventually also include the test split of the train_domain
+        train_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
+                        keep_datasets=config['train_domains'],
+                        random_state=config['random_state'], validation_size=0)
+        val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
+                        keep_datasets=config['val_domains'],
+                        random_state=config['random_state'], validation_size=0)
+        test_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
+                        keep_datasets=config['test_domains'],
+                        random_state=config['random_state'], validation_size=0)
+
+        if config['collapse_domains']:
+            self.train_loader = DataLoader(train_data, batch_size=config['batch_size'],
+                                           collate_fn=train_data.collator, shuffle=True)
+            self.val_loader = DataLoader(val_data, batch_size=config['batch_size'],
+                                           collate_fn=train_data.collator, shuffle=False)
+            self.test_loader = DataLoader(test_data, batch_size=config['batch_size'],
+                                           collate_fn=train_data.collator, shuffle=False)
+        else:
+            # loaders are now dicts mapping from domains to individual loaders
+            self.train_loader = train_data.domain_dataloaders(batch_size=config['batch_size'], collate_fn=train_data.collator,
+                                                            shuffle=True)
+            self.val_loader = val_data.domain_dataloaders(batch_size=config['batch_size'], collate_fn=val_data.collator,
+                                                            shuffle=False)
+            self.test_loader = test_data.domain_dataloaders(batch_size=config['batch_size'], collate_fn=test_data.collator,
+                                                            shuffle=False)
+
+        self.bert_scheduler = get_linear_schedule_with_warmup(self.bert_opt,
+                                                              num_warmup_steps=config['warmup_steps'],
+                                                              num_training_steps=len(self.train_loader) *
+                                                              config['epochs'])
+
     def train(self):
         """ Main training loop """
         for epoch in range(self.current_epoch, self.config['epochs']):

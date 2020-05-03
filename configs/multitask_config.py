@@ -2,13 +2,13 @@ import logging
 
 base_config = {
     'trainer': 'multitask',
-    'lr': 5e-5,
+    'lr': 5e-5, # only for bert for now
     'weight_decay': 0.01,
     'warmup_steps': 100, # number of steps to warm up for learning rate scheduler
     'collapse_domains': True, # whether to load all datasets together or individually
-    'epochs': 1,
+    'epochs': 3,
     'batch_size': 16,
-    'valid_freq': 1, 
+    'valid_freq': 200, 
     'save_freq': 100,
     'unfreeze_layers': (10, 11), # layers of bert to unfreeze
     'clip_grad_norm': 1,

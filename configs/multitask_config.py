@@ -28,9 +28,9 @@ base_config = {
 }
 
 new_config = {
-    'exp_name': 'multitask_test',
-    'epochs': 1,
-    'batch_size': 4,
+    'exp_name': 'multitask_test2',
+    'batch_size': 32,
+    'device': 'cuda'
 }
 
 config = dict(base_config)

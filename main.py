@@ -13,6 +13,8 @@ def main():
     """ Runs the trainer based on the given experiment configuration """
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default="configs.multitask_config", help='experiment configuration dict')
+    parser.add_argument('--trainer', default="MULTITASK_TRAINER", help='type of trainer model')
+
     parser.add_argument('--train', action='store_true', help='whether to train')
     # TODO: implement no_cuda
     parser.add_argument("--no_cuda", action="store_true", help='Whether not to use CUDA when available')

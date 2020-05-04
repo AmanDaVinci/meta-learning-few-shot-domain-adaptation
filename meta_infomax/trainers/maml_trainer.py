@@ -13,11 +13,11 @@ from tqdm import tqdm
 
 from meta_infomax.models.feed_forward import FeedForward
 from meta_infomax.models.sentiment_classifier import SentimentClassifier
-from meta_infomax.datasets import utils
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
 
 
 from meta_infomax.trainers.super_trainer import BaseTrainer
+from meta_infomax.datasets.utils import sample_domains
 
 
 class MAMLTrainer(BaseTrainer):
@@ -82,69 +82,66 @@ class MAMLTrainer(BaseTrainer):
                                                               num_warmup_steps=config['warmup_steps'],
                                                               num_training_steps=len(self.train_loader) *
                                                               config['epochs'])
+        self.current_episode = 0
 
     def train(self):
         """Main training loop."""
         assert self.config['collapse_domains'] == False, 'only implemented for collapse_domains=False'
         logging.info("***** Running training *****")
         logging.info("  Num examples = %d", len(self.train_loader))
-        logging.info("  Num Epochs = %d", self.config['epochs'])
-        logging.info("  Batch size = %d", self.config['batch_size'])
-        for epoch in range(self.current_epoch, self.config['epochs']):
-            self.current_epoch = epoch
+        logging.info("  Num Episodes = %d", self.config['episodes'])
+        logging.info("  K-shot = %d", self.config['k_shot_num'])
+        logging.info("  N-way = %d", self.config['n_domains'])
 
-            for i, batch in enumerate(tqdm(self.train_loader)):
-                self.current_iter += 1
-                results = self._batch_iteration(batch, training=True)
-                
-                # TODO: also write to csv file every log_freq steps
-                self.writer.add_scalar('Accuracy/Train', results['accuracy'], self.current_iter)
-                self.writer.add_scalar('Loss/Train', results['loss'], self.current_iter)
-                # TODO: only every log_freq steps
-                logging.info(f"EPOCH:{epoch} STEP:{i}\t Accuracy: {results['accuracy']:.3f} Loss: {results['loss']:.3f}")
+        for episode in range(self.current_episode, self.config['episodes']):
+            self.current_episode = episode
+            episode_domains = sample_domains(self.train_loader, n_samples=self.config['n_domains'], strategy=self.config['domain_sampling_strategy'])
+            results = self.outer_loop(episode_domains, training=True)
 
-                if self.current_iter % self.config['valid_freq'] == 0:
-                    self.validate()
+            # TODO: fix acc and res logging, also write to csv file every log_freq steps
+            #self.writer.add_scalar('Accuracy/Train', results['accuracy'], self.current_iter)
+            #self.writer.add_scalar('Loss/Train', results['loss'], self.current_iter)
+            # TODO: only every log_freq steps
+            logging.info(f"EPSIODE:{episode} Accuracy: {results['accuracy']:.3f} Meta Loss: {results['loss']:.3f}")
 
-    
-    def validate(self):
-        """ Main validation loop """
-        losses = []
-        accuracies = []
-
-        logging.info("***** Running evaluation *****")
-        with torch.no_grad():
-            for i, batch in enumerate(tqdm(self.val_loader)):
-                results = self._batch_iteration(batch, training=False)
-                losses.append(results['loss'])
-                accuracies.append(results['accuracy'])
-            
-        mean_accuracy = np.mean(accuracies)
-        mean_loss = np.mean(losses)
-        if mean_accuracy > self.best_accuracy:
-            self.best_accuracy = mean_accuracy
-            self.save_checkpoint(self.BEST_MODEL_FNAME)
-        self.writer.add_scalar('Accuracy/Valid', mean_accuracy, self.current_iter)
-        self.writer.add_scalar('Loss/Valid', mean_loss, self.current_iter)
+            #TODO add validation
+            #if self.current_iter % self.config['valid_freq'] == 0:
+                #self.validate()
         
-        report = (f"[Validation]\t"
-                  f"Accuracy: {mean_accuracy:.3f} "
-                  f"Total Loss: {np.mean(losses):.3f}")
-        logging.info(report)
 
-    def _batch_iteration(self, batch: tuple, training: bool):
+
+    def outer_loop(self, domains, training: bool):
         """ Iterate over one batch """
+        meta_loss = 0
+        for domain in domains:
+            support_batch = next(iter(self.train_loader[domain]))
+            query_batch = next(iter(self.train_loader[domain]))
+            results = self.inner_loop(support_batch, query_batch, training=training)
 
+        ## TODO average results
+        meta_results = results
+        return meta_results
+
+
+
+
+
+    def inner_loop(self, support_batch, query_batch, training):
         # send tensors to model device
-        x, masks, labels, domains = batch['x'], batch['masks'], batch['labels'], batch['domains']
-        x = x.to(self.config['device'])
-        masks = masks.to(self.config['device'])
-        labels = labels.to(self.config['device'])
+        support_x, support_masks, support_labels, support_domains = support_batch['x'], support_batch['masks'], support_batch['labels'], support_batch['domains']
+        support_x = support_x.to(self.config['device'])
+        support_masks = support_masks.to(self.config['device'])
+        support_labels = support_labels.to(self.config['device'])
+
+        query_x, query_masks, query_labels, query_domains = query_batch['x'], query_batch['masks'], query_batch['labels'], query_batch['domains']
+        query_x = query_x.to(self.config['device'])
+        query_masks = query_masks.to(self.config['device'])
+        query_labels = query_labels.to(self.config['device'])
 
         if training:
             self.bert_opt.zero_grad()
             self.ffn_opt.zero_grad()
-            output = self.model(x=x, masks=masks, labels=labels, domains=domains) # domains is ignored for now
+            output = self.model(x=support_x, masks=support_masks, labels=support_labels, domains=support_domains) # domains is ignored for now
             logits = output['logits']
             loss = output['loss']
             loss.backward()
@@ -154,7 +151,7 @@ class MAMLTrainer(BaseTrainer):
             self.ffn_opt.step()
         else:
             with torch.no_grad():
-                output = self.model(x=x, masks=masks, labels=labels, domains=domains) # domains is ignored for now
+                output = self.model(x=support_x, masks=support_masks, labels=support_labels, domains=support_domains) # domains is ignored for now
                 logits = output['logits']
                 loss = output['loss']
 

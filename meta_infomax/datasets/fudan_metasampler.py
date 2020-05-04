@@ -7,7 +7,7 @@ from torch.nn.utils.rnn import pad_sequence
 class FudanMetaSampler(object):
     ''' yields a batch of indexes for each episode of a meta-learning iteration '''
 
-    def __init__(self, labels: torch.Tensor, domains: torch.Tensor, n_classes: int, n_samples: int, n_episodes: int):
+    def __init__(self, labels: torch.Tensor, domains: torch.Tensor, domains_per_ep: int, n_samples: int, n_episodes: int):
         ''' Initialize the index matrix to sample episodes from
 
         Parameters
@@ -18,8 +18,8 @@ class FudanMetaSampler(object):
         domains:
         vector of domains to sample each episode from
 
-        n_classes:
-        number of classes in one episode
+        domains_per_ep:
+        number of domains to sample in one episode
 
         n_samples:
         number of samples from each class
@@ -30,7 +30,8 @@ class FudanMetaSampler(object):
         super().__init__()
         self.labels = labels
         self.domains = domains
-        self.n_classes = n_classes
+        # for every domain we sample both positive & negative label
+        self.n_classes = domains_per_ep*2
         self.n_samples = n_samples
         self.n_episodes = n_episodes
 

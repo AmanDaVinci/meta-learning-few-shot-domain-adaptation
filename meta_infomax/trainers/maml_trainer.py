@@ -19,6 +19,7 @@ from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
 from meta_infomax.trainers.super_trainer import BaseTrainer
 from meta_infomax.datasets.utils import sample_domains
 
+from copy import deepcopy
 
 class MAMLTrainer(BaseTrainer):
     """Train to classify sentiment across different domains/tasks"""
@@ -113,13 +114,17 @@ class MAMLTrainer(BaseTrainer):
     def outer_loop(self, domains, training: bool):
         """ Iterate over one batch """
         meta_loss = 0
+        meta_acc = 0
         for domain in domains:
             support_batch = next(iter(self.train_loader[domain]))
             query_batch = next(iter(self.train_loader[domain]))
             results = self.inner_loop(support_batch, query_batch, training=training)
 
-        ## TODO average results
-        meta_results = results
+            meta_loss += results["loss"]
+            meta_acc += results["accuracy"]
+
+
+        meta_results = {"loss": meta_loss, "accuracy" : meta_acc}
         return meta_results
 
 
@@ -139,17 +144,24 @@ class MAMLTrainer(BaseTrainer):
         query_labels = query_labels.to(self.config['device'])
 
         if training:
-            self.bert_opt.zero_grad()
-            self.ffn_opt.zero_grad()
-            output = self.model(x=support_x, masks=support_masks, labels=support_labels, domains=support_domains) # domains is ignored for now
-            logits = output['logits']
-            loss = output['loss']
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['clip_grad_norm'])
-            self.bert_opt.step()
-            self.bert_scheduler.step()
-            self.ffn_opt.step()
+            
+            ##create copy of self.model
+            fast_model = deepcopy(self.model)
+
+            for grad_step in self.config['inner_gd_steps']:
+                ## TODO implement for bert weights
+                ##self.bert_opt.zero_grad()
+                fast_model.zero_grad()
+                output = fast_model(x=support_x, masks=support_masks, labels=support_labels, domains=support_domains) # domains is ignored for now
+                logits = output['logits']
+                loss = output['loss']
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['clip_grad_norm'])
+                ##self.bert_opt.step()
+                ##self.bert_scheduler.step()
+                self.ffn_opt.step()
+            
         else:
+            ##TODO update this part
             with torch.no_grad():
                 output = self.model(x=support_x, masks=support_masks, labels=support_labels, domains=support_domains) # domains is ignored for now
                 logits = output['logits']

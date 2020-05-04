@@ -155,6 +155,7 @@ class MAMLTrainer(BaseTrainer):
                 output = fast_model(x=support_x, masks=support_masks, labels=support_labels, domains=support_domains) # domains is ignored for now
                 logits = output['logits']
                 loss = output['loss']
+                loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['clip_grad_norm'])
                 ##self.bert_opt.step()
                 ##self.bert_scheduler.step()

@@ -77,17 +77,16 @@ class FeedForward(nn.Module):
             output = inputs
             for layer, activation, dropout in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
                 output = dropout(activation(layer(output)))
-                print("no custom output shape is")
-                print(output.shape)
 
             output = self._linear_layers[-1](output)
         else:
+
             output = inputs
             layer_ind = 0
             for layer, activation, dropout in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
-                output = F.dropout(F.relu(F.linear(output, custom_params[layer_ind])), 0.5)
-                layer_ind += 1
-                print("custom output shape is")
-                print(output.shape)
+                output = F.dropout(F.relu(F.linear(output, custom_params[layer_ind], custom_params[layer_ind+1])), 0.5)
+                layer_ind += 2
+            
+            output = F.linear(output, custom_params[-2], custom_params[-1])
    
         return output

@@ -88,9 +88,6 @@ class SentimentClassifier(nn.Module):
         logits = self.head(sentence_embedding, custom_params = custom_params)
         output_dict = {'logits': logits}
 
-        print("logits shape")
-        print(logits.shape)
-        print(labels.shape)
 
         if labels is not None:
             output_dict["loss"] = self.criterion(logits, labels)

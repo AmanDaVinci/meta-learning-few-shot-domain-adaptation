@@ -10,6 +10,7 @@ new_config = {
     'collapse_domains' : False,
     'exp_name': 'multitask_test',
     'episodes': 100,
+    'val_episodes' : 20,
     'domain_sampling_strategy' : "uniform",
     'inner_gd_steps': 3
 }

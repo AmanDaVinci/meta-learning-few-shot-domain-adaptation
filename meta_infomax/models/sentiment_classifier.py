@@ -64,13 +64,30 @@ class SentimentClassifier(nn.Module):
         loss : torch.FloatTensor, optional
             A scalar loss to be optimised.
         """
+
+        sentence_embedding = self.encode(x, masks)
+        return self.classify_encoded(sentence_embedding, labels)
+
+
+
+    def encode(self,
+                x: torch.Tensor,
+                masks: torch.Tensor = None):
+
+        ### run the data through the encoder part of the model (Transformer)
         if masks is None:
             # if masks not provided, we don't mask any observation
             masks = torch.ones_like(x)
         encoded_text = self.encoder(input_ids=x, attention_mask=masks)
         sentence_embedding = self.pooler(encoded_text)
 
-        logits = self.head(sentence_embedding)
+        return sentence_embedding
+
+    def classify_encoded(self, sentence_embedding, labels = None, custom_head = None):
+        if custom_head:
+            logits = custom_head(sentence_embedding)
+        else:
+            logits = self.head(sentence_embedding)
         output_dict = {'logits': logits}
 
         if labels is not None:

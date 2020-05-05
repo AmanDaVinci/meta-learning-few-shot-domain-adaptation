@@ -193,9 +193,10 @@ class MAMLTrainer(BaseTrainer):
                 grad = torch.autograd.grad(loss, self.fast_weights_head_net.parameters())
                 fast_weights_head_params = list(map(lambda p: p[1] - self.config['fast_weight_lr'] * p[0], zip(grad, self.fast_weights_head_net.parameters())))
                 
-            ### classifiy query set and get loss
+            ### classifiy query set and get loss for meta update
             self.model.zero_grad()
-            output = self.model(x=query_x, masks=query_masks, labels=query_labels, domains=query_domains)
+            query_encoded = self.model.encode(x=query_x, masks=query_masks)
+            output = self.model.classify_encoded(query_encoded, query_labels, self.fast_weights_head_net)
             loss = output['loss']
             
         else:

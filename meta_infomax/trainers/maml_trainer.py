@@ -76,7 +76,8 @@ class MAMLTrainer(BaseTrainer):
                                                               num_training_steps=len(self.train_loader) *
                                                               config['epochs'])
         self.current_episode = 0
-        self.fast_weights_head_net = deepcopy(self.model.head)
+
+        self.ffn_opt = optim.Adam(self.model.head.parameters(), lr=self.config['meta_lr'])
 
     def train(self):
         """Main training loop."""
@@ -93,6 +94,12 @@ class MAMLTrainer(BaseTrainer):
             results = self.outer_loop(episode_domains, mode='training')
 
             results['loss'].backward()
+
+            ## checking grads
+            print("checking grads of original head")
+            for param in self.model.head.parameters():
+                print(param.grad)
+        
             self.ffn_opt.step()
 
             # TODO:  also write to csv file every log_freq steps
@@ -172,31 +179,28 @@ class MAMLTrainer(BaseTrainer):
             output = self.model(x=support_x, masks=support_masks, labels=support_labels, domains=support_domains) # domains is ignored for now
             logits = output['logits']
             loss = output['loss']
-            grad = torch.autograd.grad(loss, self.model.head.parameters())
+            grad = torch.autograd.grad(loss, self.model.head.parameters(), create_graph=True)
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['clip_grad_norm'])
             fast_weights_head_params = list(map(lambda p: p[1] - self.config['fast_weight_lr'] * p[0], zip(grad, self.model.head.parameters())))
             
 
             ### loop through rest of the steps
             for grad_step in range(1, self.config['inner_gd_steps']):
-                ##updating head net params as calculated#
-                for paramInd, param in enumerate(self.fast_weights_head_net.parameters()):
-                    param = fast_weights_head_params[paramInd]
                      
                 ## TODO implement for bert weights
                 ##self.bert_opt.zero_grad()
                 encoded_data = self.model.encode(x=support_x, masks=support_masks)
-                output = self.model.classify_encoded(encoded_data, support_labels, custom_head=self.fast_weights_head_net)
+                output = self.model.classify_encoded(encoded_data, support_labels, custom_params= fast_weights_head_params)
                 logits = output['logits']
                 loss = output['loss']
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['clip_grad_norm'])
-                grad = torch.autograd.grad(loss, self.fast_weights_head_net.parameters())
-                fast_weights_head_params = list(map(lambda p: p[1] - self.config['fast_weight_lr'] * p[0], zip(grad, self.fast_weights_head_net.parameters())))
+                grad = torch.autograd.grad(loss, fast_weights_head_params, create_graph=True)
+                fast_weights_head_params = list(map(lambda p: p[1] - self.config['fast_weight_lr'] * p[0], zip(grad, fast_weights_head_params)))
                 
             ### classifiy query set and get loss for meta update
             self.model.zero_grad()
             query_encoded = self.model.encode(x=query_x, masks=query_masks)
-            output = self.model.classify_encoded(query_encoded, query_labels, self.fast_weights_head_net)
+            output = self.model.classify_encoded(query_encoded, query_labels, fast_weights_head_params)
             loss = output['loss']
             
         else:

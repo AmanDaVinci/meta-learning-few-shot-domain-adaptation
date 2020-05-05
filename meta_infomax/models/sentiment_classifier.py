@@ -83,12 +83,14 @@ class SentimentClassifier(nn.Module):
 
         return sentence_embedding
 
-    def classify_encoded(self, sentence_embedding, labels = None, custom_head = None):
-        if custom_head:
-            logits = custom_head(sentence_embedding)
-        else:
-            logits = self.head(sentence_embedding)
+    def classify_encoded(self, sentence_embedding, labels = None, custom_params = None):
+     
+        logits = self.head(sentence_embedding, custom_params = custom_params)
         output_dict = {'logits': logits}
+
+        print("logits shape")
+        print(logits.shape)
+        print(labels.shape)
 
         if labels is not None:
             output_dict["loss"] = self.criterion(logits, labels)

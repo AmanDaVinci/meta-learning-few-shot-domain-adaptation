@@ -2,6 +2,7 @@
 import torch
 import torch.nn as nn
 from typing import Union, List, Dict
+from torch.nn import functional as F
 
 
 class FeedForward(nn.Module):
@@ -71,10 +72,22 @@ class FeedForward(nn.Module):
     def get_input_dim(self):
         return self.input_dim
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        output = inputs
-        for layer, activation, dropout in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
-            output = dropout(activation(layer(output)))
+    def forward(self, inputs: torch.Tensor, custom_params = None) -> torch.Tensor:
+        if not custom_params:
+            output = inputs
+            for layer, activation, dropout in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
+                output = dropout(activation(layer(output)))
+                print("no custom output shape is")
+                print(output.shape)
 
-        output = self._linear_layers[-1](output)
+            output = self._linear_layers[-1](output)
+        else:
+            output = inputs
+            layer_ind = 0
+            for layer, activation, dropout in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
+                output = F.dropout(F.relu(F.linear(output, custom_params[layer_ind])), 0.5)
+                layer_ind += 1
+                print("custom output shape is")
+                print(output.shape)
+   
         return output

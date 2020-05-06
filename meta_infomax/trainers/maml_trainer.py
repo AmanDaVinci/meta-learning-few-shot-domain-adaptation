@@ -95,45 +95,46 @@ class MAMLTrainer(BaseTrainer):
 
             results['loss'].backward()
 
-            ## checking grads
-            print("checking grads")
-            for param in self.model.head.parameters():
-                print(param.grad)
-        
             self.ffn_opt.step()
 
             # TODO:  also write to csv file every log_freq steps
-            self.writer.add_scalar('Query_Accuracy/Train', results['accuracy'], self.current_iter)
-            self.writer.add_scalar('Meta_Loss/Train', results['loss'].item(), self.current_iter)
+            self.writer.add_scalar('Query_Accuracy/Train', results['accuracy'], self.current_episode)
+            self.writer.add_scalar('Meta_Loss/Train', results['loss'].item(), self.current_episode)
             # TODO: only every log_freq steps
             logging.info(f"EPSIODE:{episode} Query_Accuracy: {results['accuracy']:.3f} Meta_Loss: {results['loss'].item():.3f}")
 
             #TODO add validation
             if self.current_episode % self.config['valid_freq'] == 0:
-                self.validate()
+                self.fine_tune(mode = 'validate')
         
 
-    def validate(self):
+    def fine_tune(self, mode):
         """ Main validation loop """
-        losses = []
-        accuracies = []
 
-        logging.info("***** Running evaluation *****")
-        with torch.no_grad():
-            for episode in range(self.config['val_episodes']):
-                results = self.outer_loop(self.config['val_domains'], mode='validate')
+        
+        if mode == 'validate':
+            logging.info("***** Running evaluation *****")
+            domains = self.config['val_domains']
+            episodes = range(self.config['val_episodes'])
+        elif mode == 'test':
+            logging.info("***** Running test *****")
+            domains = self.config['test_domains']
+            episodes = range(self.config['test_episodes'])
+
+        for episode in episodes:
+            results = self.outer_loop(domains, mode=mode)
             
-        mean_accuracy = np.mean(accuracies)
-        mean_loss = np.mean(losses)
+        mean_accuracy = results['accuracy']
+        mean_loss = results['loss']
         if mean_accuracy > self.best_accuracy:
             self.best_accuracy = mean_accuracy
             self.save_checkpoint(self.BEST_MODEL_FNAME)
-        self.writer.add_scalar('Query_Accuracy/Valid', mean_accuracy, self.current_iter)
-        self.writer.add_scalar('Meta_Loss/Valid', mean_loss, self.current_iter)
+        self.writer.add_scalar('Query_Accuracy/' + mode, mean_accuracy, self.current_episode)
+        self.writer.add_scalar('Meta_Loss/' + mode, mean_loss, self.current_episode)
         
         report = (f"[Validation]\t"
                   f"Query_Accuracy: {mean_accuracy:.3f} "
-                  f"Total Meta_Loss: {np.mean(losses):.3f}")
+                  f"Total Meta_Loss: {mean_loss:.3f}")
         logging.info(report)
 
     def outer_loop(self, domains, mode: str):
@@ -145,11 +146,13 @@ class MAMLTrainer(BaseTrainer):
             loader = self.train_loader
         elif mode == 'validate':
             loader = self.val_loader
+        elif mode == 'test':
+            loader = self.test_loader
 
         for domain in domains:
             support_batch = next(iter(loader[domain]))
             query_batch = next(iter(loader[domain]))
-            results = self.inner_loop(support_batch, query_batch, mode=mode)
+            results = self.inner_loop(support_batch, query_batch)
 
             meta_loss += results["loss"]
             meta_acc += results["accuracy"]
@@ -159,7 +162,7 @@ class MAMLTrainer(BaseTrainer):
         return meta_results
 
 
-    def inner_loop(self, support_batch, query_batch, mode):
+    def inner_loop(self, support_batch, query_batch):
         # send tensors to model device
         support_x, support_masks, support_labels, support_domains = support_batch['x'], support_batch['masks'], support_batch['labels'], support_batch['domains']
         support_x = support_x.to(self.config['device'])
@@ -171,46 +174,40 @@ class MAMLTrainer(BaseTrainer):
         query_masks = query_masks.to(self.config['device'])
         query_labels = query_labels.to(self.config['device'])
 
-        if mode == 'training':
-            ### initial update based on the net's weights
+        ### initial update based on the net's weights
+        ## TODO implement for bert weights
+        ##self.bert_opt.zero_grad()
+
+        self.model.zero_grad()
+        output = self.model(x=support_x, masks=support_masks, labels=support_labels, domains=support_domains) # domains is ignored for now
+        logits = output['logits']
+        loss = output['loss']
+        grad = torch.autograd.grad(loss, self.model.head.parameters(), create_graph=True)
+
+
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['clip_grad_norm'])
+        fast_weights_head = list(map(lambda p: p[1] - self.config['fast_weight_lr'] * p[0], zip(grad, self.model.head.parameters())))
+
+        ### loop through rest of the steps
+        for grad_step in range(1, self.config['inner_gd_steps']):
+                    
             ## TODO implement for bert weights
             ##self.bert_opt.zero_grad()
-
-            self.model.zero_grad()
-            output = self.model(x=support_x, masks=support_masks, labels=support_labels, domains=support_domains) # domains is ignored for now
+            encoded_data = self.model.encode(x=support_x, masks=support_masks)
+            output = self.model.classify_encoded(encoded_data, support_labels, custom_params= fast_weights_head)
             logits = output['logits']
             loss = output['loss']
-            grad = torch.autograd.grad(loss, self.model.head.parameters(), create_graph=True)
-
-
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['clip_grad_norm'])
-            fast_weights_head = list(map(lambda p: p[1] - self.config['fast_weight_lr'] * p[0], zip(grad, self.model.head.parameters())))
+            grad = torch.autograd.grad(loss, fast_weights_head, create_graph = True)
 
-            ### loop through rest of the steps
-            for grad_step in range(1, self.config['inner_gd_steps']):
-                     
-                ## TODO implement for bert weights
-                ##self.bert_opt.zero_grad()
-                encoded_data = self.model.encode(x=support_x, masks=support_masks)
-                output = self.model.classify_encoded(encoded_data, support_labels, custom_params= fast_weights_head)
-                logits = output['logits']
-                loss = output['loss']
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['clip_grad_norm'])
-                grad = torch.autograd.grad(loss, fast_weights_head, create_graph=True)
-
-                fast_weights_head = list(map(lambda p: p[1] - self.config['fast_weight_lr'] * p[0], zip(grad, fast_weights_head)))
-                
-            ### classifiy query set and get loss for meta update
-            self.model.zero_grad()
-            query_encoded = self.model.encode(x=query_x, masks=query_masks)
-            output = self.model.classify_encoded(query_encoded, query_labels, fast_weights_head)
-            loss = output['loss']
+            fast_weights_head = list(map(lambda p: p[1] - self.config['fast_weight_lr'] * p[0], zip(grad, fast_weights_head)))
             
-        else:
-            with torch.no_grad():
-                output = self.model(x=support_x, masks=support_masks, labels=support_labels, domains=support_domains) # domains is ignored for now
-                logits = output['logits']
-                loss = output['loss']
+        ### classifiy query set and get loss for meta update
+        self.model.zero_grad()
+        query_encoded = self.model.encode(x=query_x, masks=query_masks)
+        output = self.model.classify_encoded(query_encoded, query_labels, fast_weights_head)
+        loss = output['loss']
+            
 
         results = {'accuracy': output['acc'], 'loss': loss}
         return results

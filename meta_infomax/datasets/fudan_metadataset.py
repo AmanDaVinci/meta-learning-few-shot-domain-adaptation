@@ -43,7 +43,7 @@ class FudanMetaDataset(Dataset):
         self.y = torch.tensor(df['label'].tolist())
     
     def __getitem__(self, idx):
-        return self.x[idx], self.attn_mask[idx], self.y[idx]
+        return self.x[idx], self.attn_mask[idx], self.y[idx], self.domains[idx]
     
     def __len__(self):
         return len(self.x)

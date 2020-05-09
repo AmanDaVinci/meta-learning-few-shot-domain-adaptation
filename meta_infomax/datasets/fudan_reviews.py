@@ -152,49 +152,88 @@ class MultiTaskDataset(Dataset):
         logging.getLogger("transformers.tokenization_utils").setLevel(logging.WARNING)
         return tokenized
     
-    def get_domain(self, domain):
+    def get_subset(self, domain=None, label=None):
         """Get all the data for a single domain.
         
         Parameters
         ---
-        domain : str
+        domain : str, optional
             Domain of which we want to get the data.
-        
+        label: int, optional
+            Sentiment label in {0, 1}. If specified, also select on label. 
+
         Returns
         ---
-        SingleTaskDataset for the given domain
+        SingleTaskDataset for the given domain and label.
         """
-        assert domain in self.keep_datasets, 'ensure domain is present in data'
-        return SingleTaskDataset(self.data[self.data.domain == domain].reset_index(drop=True))
+        assert domain is not None or label is not None, 'at least one criterion to subset needed'
+        mask = 1
+        if domain is not None:
+            assert domain in self.keep_datasets, 'ensure domain is present in data'
+            mask = mask & (self.data.domain == domain)
+        if label is not None:
+            mask = mask & (self.data.label == label)
+
+        return SingleTaskDataset(self.data[mask].reset_index(drop=True))
     
-    def domain_datasets(self, domains):
+    def subset_datasets(self, domains=None, label=None):
         """
-        Create datasets for each domain given in domains.
+        Create datasets for each domain given in domains and filter on label if given.
         
         Parameters
         ---
         domains : List[str]
             Domains for which we want datasets.
+        label: int, optional
+            Sentiment label in {0, 1}. If specified, also select on label. 
             
         Returns
         ---
+        If domains=None -> SingleTaskDataset. Otherwise
         Dict[str, SingleTaskDataset]
         """
+        assert domains is not None or label is not None, 'at least one criterion to subset needed'
+        if domains is None:
+            return self.get_subset(label=label)
         result = {}
         for domain in domains:
             assert domain in self.keep_datasets, 'make sure domain is in available domains.'
-            result[domain] = self.get_domain(domain)
+            result[domain] = self.get_subset(domain=domain, label=label)
         return result
-            
-    def domain_dataloaders(self, domains=None, **kwargs):
+
+    def subset_dataloaders(self, domains=None, label=None, **kwargs):
         """
-        Create dataloaders for each domain given in domains.
+        Create dataloaders subset of data based on domain and label.
         
         Parameters
         ---
         domains : List[str]
             Domains for which we want datasets. If not provided, default to all datasets provided in
             keep_datasets.
+        label: int, optional
+            Sentiment label in {0, 1}. If specified, also select on label. 
+        kwargs: keyword arguments for DataLoader.
+            
+        Returns
+        ---
+        Dict[str, DataLoader]
+        """
+        assert domains is not None or label is not None, 'at least one criterion to subset needed'
+        if domains is None:
+            return DataLoader(self.get_subset(label=label), **kwargs)
+        return self.domain_dataloaders(domains=domains, label=label, **kwargs)
+            
+    def domain_dataloaders(self, domains=None, label=None, **kwargs):
+        """
+        Create dataloaders for each domain given in domains. Optionally filter on label.
+        
+        Parameters
+        ---
+        domains : List[str]
+            Domains for which we want datasets. If not provided, default to all datasets provided in
+            keep_datasets.
+        label: int, optional
+            Sentiment label in {0, 1}. If specified, also select on label. 
         kwargs: keyword arguments for DataLoader.
             
         Returns
@@ -204,7 +243,7 @@ class MultiTaskDataset(Dataset):
         result = {}
         if domains is None:
             domains = self.keep_datasets
-        domain_datasets = self.domain_datasets(domains)
+        domain_datasets = self.subset_datasets(domains=domains, label=label)
         for domain in domains:
             assert domain in self.keep_datasets, 'make sure domain is in available domains.'
             result[domain] = DataLoader(domain_datasets[domain], **kwargs)

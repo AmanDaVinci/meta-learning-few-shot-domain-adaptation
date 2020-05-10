@@ -72,13 +72,40 @@ class SentimentClassifier(nn.Module):
 
     def encode(self,
                 x: torch.Tensor,
-                masks: torch.Tensor = None):
+                masks: torch.Tensor = None,
+                custom_params: torch.Tensor = None):
 
         ### run the data through the encoder part of the model (Transformer)
+
+        if custom_params:
+            return self.encode_with_custom_params(
+                x, custom_params, masks
+            )
+
         if masks is None:
             # if masks not provided, we don't mask any observation
             masks = torch.ones_like(x)
         encoded_text = self.encoder(input_ids=x, attention_mask=masks)
+        sentence_embedding = self.pooler(encoded_text)
+
+        return sentence_embedding
+
+    def encode_with_custom_params(self,
+                x: torch.Tensor,
+                masks: torch.Tensor = None,
+                custom_params: torch.Tensor = None):
+        
+        if masks is None:
+            # if masks not provided, we don't mask any observation
+            masks = torch.ones_like(x)
+        encoded_text = self.encoder(input_ids=x, attention_mask=masks)
+
+        for t in encoded_text:
+            print(t[0].shape)
+        print(len(encoded_text))
+
+        print(self.encoder.config)
+        exit()
         sentence_embedding = self.pooler(encoded_text)
 
         return sentence_embedding

@@ -71,13 +71,18 @@ class FOMAMLTrainer(BaseTrainer):
         self.test_loader = test_data.domain_dataloaders(batch_size=config['k_shot_num'], collate_fn=test_data.collator,
                                                         shuffle=False)
 
-        self.bert_scheduler = get_linear_schedule_with_warmup(self.bert_opt,
-                                                              num_warmup_steps=config['warmup_steps'],
-                                                              num_training_steps=len(self.train_loader) *
-                                                              config['epochs'])
+
         self.current_episode = 0
 
-        self.ffn_opt = optim.Adam(self.model.parameters(), lr=self.config['meta_lr'])
+        self.ffn_opt = optim.Adam(self.model.head.parameters(), lr=self.config['meta_lr'])
+
+        self.bert_opt = AdamW(self.model.encoder.parameters(), lr=config['lr'], correct_bias=False,
+                    weight_decay=config['weight_decay']) # use transformers AdamW
+
+        self.bert_scheduler = get_linear_schedule_with_warmup(self.bert_opt,
+                                                        num_warmup_steps=config['warmup_steps'],
+                                                        num_training_steps=len(self.train_loader) *
+                                                        config['epochs'])
 
 
 
@@ -182,7 +187,12 @@ class FOMAMLTrainer(BaseTrainer):
 
         ## calling the update
         self.ffn_opt.step()
+        self.bert_opt.step()
+        self.bert_scheduler.step()
+
         self.ffn_opt.zero_grad()
+        self.bert_opt.zero_grad()
+
         meta_results = {"loss": meta_loss, "accuracy" : meta_acc/len(domains)}
         return meta_results
 

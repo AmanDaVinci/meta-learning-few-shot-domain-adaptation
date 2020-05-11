@@ -77,8 +77,7 @@ class FOMAMLTrainer(BaseTrainer):
                                                               config['epochs'])
         self.current_episode = 0
 
-        self.ffn_opt = optim.Adam(self.model.head.parameters(), lr=self.config['meta_lr'])
-        self.ffn_opt_inner = optim.Adam(self.model.head.parameters(), lr=self.config['fast_weight_lr'])
+        self.ffn_opt = optim.Adam(self.model.parameters(), lr=self.config['meta_lr'])
 
 
 
@@ -149,14 +148,16 @@ class FOMAMLTrainer(BaseTrainer):
         elif mode == 'test':
             loader = self.test_loader
 
-        domain_grads = []
+        domain_grads_head = []
+        domain_grads_bert = []
         loader = {domain : iter(domain_loader) for domain, domain_loader in loader.items()}
         for domain in domains:
 
             batch_iterator = loader[domain]
 
-            grads, results = self.inner_loop(batch_iterator)
-            domain_grads.append(grads)
+            grads_head, grads_bert, results = self.inner_loop(batch_iterator)
+            domain_grads_head.append(grads_head)
+            domain_grads_bert.append(grads_bert)
 
             meta_loss += results["loss"]
             meta_acc += results["accuracy"]
@@ -164,14 +165,20 @@ class FOMAMLTrainer(BaseTrainer):
         ### updating main parameters - head
 
         ## summing domain grads
-        sum_grads = domain_grads[0]
-        for grad_ind in range(1, len(domain_grads)):
-            for layer_ind in range(len(domain_grads[grad_ind])):
-                sum_grads[layer_ind] += domain_grads[grad_ind][layer_ind]
+        sum_grads_head = domain_grads_head[0]
+        for grad_ind in range(1, len(domain_grads_head)):
+            for layer_ind in range(len(domain_grads_head[grad_ind])):
+                sum_grads_head[layer_ind] += domain_grads_head[grad_ind][layer_ind]
+
+        bert_grad_keys = domain_grads_bert[0].keys()
+        sum_grads_bert = domain_grads_bert[0]
+        for grad_ind in range(1, len(domain_grads_bert)):
+            for layer_key in bert_grad_keys:
+                sum_grads_bert[layer_key] += domain_grads_bert[grad_ind][layer_key]
 
         ### putting grads into the parameters
-        for ind, layer in enumerate(self.model.head.parameters()):
-            layer.grad = sum_grads[ind]
+        self.model.update_head_grads(sum_grads_head)
+        self.model.update_bert_grads(sum_grads_bert)
 
         ## calling the update
         self.ffn_opt.step()
@@ -194,7 +201,7 @@ class FOMAMLTrainer(BaseTrainer):
         ## TODO implement for bert weights
         ##self.bert_opt.zero_grad()
         fast_weight_net = deepcopy(self.model)
-        self.ffn_opt_inner = optim.Adam(fast_weight_net.head.parameters(), lr=self.config['fast_weight_lr'])
+        self.ffn_opt_inner = optim.Adam(fast_weight_net.parameters(), lr=self.config['fast_weight_lr'])
         
         for grad_step in range(0, self.config['inner_gd_steps']-1):
             
@@ -227,7 +234,8 @@ class FOMAMLTrainer(BaseTrainer):
         
         torch.nn.utils.clip_grad_norm_(fast_weight_net.parameters(), self.config['clip_grad_norm'])
 
-        grad = [l.grad for l in fast_weight_net.head.parameters()]
+        grad_head = fast_weight_net.get_head_grads()
+        grad_bert = fast_weight_net.get_bert_grads()
 
         results = {'accuracy': output['acc'], 'loss': loss}
-        return grad, results
+        return grad_head, grad_bert, results

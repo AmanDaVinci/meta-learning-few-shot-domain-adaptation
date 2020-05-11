@@ -143,6 +143,7 @@ class SentimentClassifier(nn.Module):
         layers: iterable(int)
             Layers to unfreeze.
         """
+        self.unfrozen_layers = layers
         for name, param in self.encoder.named_parameters():
             if name.startswith(f"encoder"):
                 layer_index = int(name.split(".")[2])
@@ -157,3 +158,40 @@ class SentimentClassifier(nn.Module):
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
+
+    def get_head_grads(self):
+        return [l.grad for l in self.head.parameters()]
+
+    def update_head_grads(self, grads):
+        for ind, layer in enumerate(self.head.parameters()):
+            layer.grad = grads[ind]
+
+    def get_bert_grads(self):
+        g = {}
+        for name, param in self.encoder.named_parameters():
+            if name.startswith(f"encoder"):
+                layer_index = int(name.split(".")[2])
+                if layer_index in self.unfrozen_layers:
+                    g[name] = param.grad
+
+            elif name.startswith(f"pooler"):
+                    if param.grad == None:
+                        g[name] = 0
+                    else:
+                        g[name] = param.grad
+        return g
+
+    def update_bert_grads(self, grads):
+        for name, param in self.encoder.named_parameters():
+            if name.startswith(f"encoder"):
+                layer_index = int(name.split(".")[2])
+                if layer_index in self.unfrozen_layers:
+                    param.grad = grads[name]
+
+            elif name.startswith(f"pooler"):
+                    if grads[name] != 0:
+                        param.grad = grads[name]
+
+
+
+

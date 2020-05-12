@@ -14,7 +14,7 @@ base_config = {
     'clip_grad_norm': 1,
     'validation_size': 0, # percentage of train data used for validation data (over split, not over domain)
     'random_state': 42, # random state for reproducibility, currently only used for splitting train and val
-    'device': 'cpu',
+    'device': 'cuda',
     'data_dir': 'data/mtl-dataset/',
     'transformer_name': 'bert-base-uncased',
     'domains': ['apparel', 'baby', 'books', 'camera_photo', 'electronics',

@@ -1,7 +1,6 @@
-
 import torch
 import torch.nn as nn
-from typing import Union, List, Dict
+from typing import Union, List
 
 
 class FeedForward(nn.Module):
@@ -43,15 +42,15 @@ class FeedForward(nn.Module):
         if not isinstance(dropout, list):
             dropout = [dropout] * num_layers  # type: ignore
         if len(hidden_dims) != num_layers:
-            raise ConfigurationError(
+            raise ValueError(
                 "len(hidden_dims) (%d) != num_layers (%d)" % (len(hidden_dims), num_layers)
             )
         if len(activations) != num_layers:
-            raise ConfigurationError(
+            raise ValueError(
                 "len(activations) (%d) != num_layers (%d)" % (len(activations), num_layers)
             )
         if len(dropout) != num_layers:
-            raise ConfigurationError(
+            raise ValueError(
                 "len(dropout) (%d) != num_layers (%d)" % (len(dropout), num_layers)
             )
         self._activations = activations

@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from typing import Union, List, Dict
 
 
 def accuracy(y_pred: torch.Tensor, y: torch.Tensor) -> float:

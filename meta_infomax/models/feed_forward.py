@@ -76,16 +76,13 @@ class FeedForward(nn.Module):
             output = inputs
             for layer, activation, dropout in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
                 output = dropout(activation(layer(output)))
-
             output = self._linear_layers[-1](output)
         else:
-
             output = inputs
             layer_ind = 0
-            for layer, activation, dropout in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
+            for _, _, _ in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
                 output = F.dropout(F.relu(F.linear(output, custom_params[layer_ind], custom_params[layer_ind+1])), 0.0)
                 layer_ind += 2
-
             output = F.linear(output, custom_params[-2], custom_params[-1])
 
         return output

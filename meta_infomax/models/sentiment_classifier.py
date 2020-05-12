@@ -64,14 +64,57 @@ class SentimentClassifier(nn.Module):
         loss : torch.FloatTensor, optional
             A scalar loss to be optimised.
         """
+
+        sentence_embedding = self.encode(x, masks)
+        return self.classify_encoded(sentence_embedding, labels)
+
+
+
+    def encode(self,
+                x: torch.Tensor,
+                masks: torch.Tensor = None,
+                custom_params: torch.Tensor = None):
+
+        ### run the data through the encoder part of the model (Transformer)
+
+        if custom_params:
+            return self.encode_with_custom_params(
+                x, custom_params, masks
+            )
+
         if masks is None:
             # if masks not provided, we don't mask any observation
             masks = torch.ones_like(x)
         encoded_text = self.encoder(input_ids=x, attention_mask=masks)
         sentence_embedding = self.pooler(encoded_text)
 
-        logits = self.head(sentence_embedding)
+        return sentence_embedding
+
+    def encode_with_custom_params(self,
+                x: torch.Tensor,
+                masks: torch.Tensor = None,
+                custom_params: torch.Tensor = None):
+        
+        if masks is None:
+            # if masks not provided, we don't mask any observation
+            masks = torch.ones_like(x)
+        encoded_text = self.encoder(input_ids=x, attention_mask=masks)
+
+        for t in encoded_text:
+            print(t[0].shape)
+        print(len(encoded_text))
+
+        print(self.encoder.config)
+        exit()
+        sentence_embedding = self.pooler(encoded_text)
+
+        return sentence_embedding
+
+    def classify_encoded(self, sentence_embedding, labels = None, custom_params = None):
+     
+        logits = self.head(sentence_embedding, custom_params = custom_params)
         output_dict = {'logits': logits}
+
 
         if labels is not None:
             output_dict["loss"] = self.criterion(logits, labels)
@@ -100,6 +143,7 @@ class SentimentClassifier(nn.Module):
         layers: iterable(int)
             Layers to unfreeze.
         """
+        self.unfrozen_layers = layers
         for name, param in self.encoder.named_parameters():
             if name.startswith(f"encoder"):
                 layer_index = int(name.split(".")[2])
@@ -114,3 +158,40 @@ class SentimentClassifier(nn.Module):
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
+
+    def get_head_grads(self):
+        return [l.grad for l in self.head.parameters()]
+
+    def update_head_grads(self, grads):
+        for ind, layer in enumerate(self.head.parameters()):
+            layer.grad = grads[ind]
+
+    def get_bert_grads(self):
+        g = {}
+        for name, param in self.encoder.named_parameters():
+            if name.startswith(f"encoder"):
+                layer_index = int(name.split(".")[2])
+                if layer_index in self.unfrozen_layers:
+                    g[name] = param.grad
+
+            elif name.startswith(f"pooler"):
+                    if param.grad == None:
+                        g[name] = 0
+                    else:
+                        g[name] = param.grad
+        return g
+
+    def update_bert_grads(self, grads):
+        for name, param in self.encoder.named_parameters():
+            if name.startswith(f"encoder"):
+                layer_index = int(name.split(".")[2])
+                if layer_index in self.unfrozen_layers:
+                    param.grad = grads[name]
+
+            elif name.startswith(f"pooler"):
+                    if grads[name] != 0:
+                        param.grad = grads[name]
+
+
+
+

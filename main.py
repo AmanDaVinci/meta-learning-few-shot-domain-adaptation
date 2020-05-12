@@ -1,4 +1,8 @@
 import importlib
+from meta_infomax.trainers.multitask_trainer import MultitaskTrainer
+from meta_infomax.trainers.maml_trainer import MAMLTrainer
+from meta_infomax.trainers.fomaml_trainer import FOMAMLTrainer
+
 
 import argparse
 
@@ -16,6 +20,8 @@ def main():
     """ Runs the trainer based on the given experiment configuration """
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default="configs.evaluation_config", help='experiment configuration dict')
+    parser.add_argument('--trainer', default="MULTITASK_TRAINER", help='type of trainer model')
+
     parser.add_argument('--train', default=True, action='store_true', help='whether to train')
     # TODO: implement no_cuda
     parser.add_argument("--no_cuda", action="store_true", help='Whether not to use CUDA when available')
@@ -29,7 +35,7 @@ def main():
     if trainer_type == MULTITASK_TRAINER:
         trainer = MultitaskTrainer(config_module.config)
     elif trainer_type == MAML_TRAINER:
-        trainer = MAMLTrainer(config_module.config)
+        trainer = FOMAMLTrainer(config_module.config)
     elif trainer_type == PROTOTYPICAL_TRAINER:
         pass  # ProtoTrainer(config_module.config)
     elif trainer_type == EVALUATION_TRAINER:

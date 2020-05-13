@@ -1,9 +1,12 @@
+import copy
 import csv
 import logging
 import numpy as np
 import torch
 from pathlib import Path
+from torch import optim
 from tqdm import tqdm
+from transformers import AdamW
 from typing import Dict
 
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
@@ -40,9 +43,7 @@ class EvaluationTrainer(BaseTrainer):
         """
         super().__init__(config)
         self.load_checkpoint(config['eval_experiment'])
-        self.model_state_dict = self.model.state_dict().copy()  # we have to re init at every evaluation
-        self.bert_opt_dict = self.bert_opt.state_dict().copy()
-        self.ffn_opt_dict = self.ffn_opt.state_dict().copy()
+        self.model_state_dict = copy.deepcopy(self.model.state_dict())  # we have to re init at every evaluation
 
         # for now, we say that the training data, is the train split of every train domain
         # we could eventually also include the test split of the train_domain
@@ -87,9 +88,14 @@ class EvaluationTrainer(BaseTrainer):
         Train for a few steps on k samples for the 2 classes and evaluate on the test set.
         """
         for domain in self.config['test_domains']:
-            self.model.load_state_dict(self.model_state_dict)  # we have to re init at every evaluation
-            self.bert_opt.load_state_dict(self.bert_opt_dict)  # we have to re init at every evaluation
-            self.ffn_opt.load_state_dict(self.ffn_opt_dict)    # we have to re init at every evaluation
+            # we have to re init at every evaluation
+            self.model.load_state_dict(self.model_state_dict)
+            self.ffn_opt = optim.Adam(self.model.head.parameters())
+            self.bert_opt = AdamW(self.model.encoder.parameters(),
+                                  lr=self.config['lr'],
+                                  correct_bias=False,
+                                  weight_decay=self.config['weight_decay'])
+
             logging.info(f"Begin training on domain {domain} for {self.config['epochs']} epochs")
             self.train(domain)
             self.validate(domain)
@@ -102,6 +108,7 @@ class EvaluationTrainer(BaseTrainer):
         positive_batch = next(self.train_loader_positive[domain])
         negative_batch = next(self.train_loader_negative[domain])
 
+        # combine the samples in one big batch and shuffle them
         samples = {}
         shuffle_idx = torch.randperm(len(positive_batch['x']))
         for k in positive_batch.keys():
@@ -167,7 +174,6 @@ class EvaluationTrainer(BaseTrainer):
             self.bert_opt.zero_grad()
             self.ffn_opt.zero_grad()
             output = self.model(x=x, masks=masks, labels=labels, domains=domains)  # domains is ignored for now
-            logits = output['logits']
             loss = output['loss']
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['clip_grad_norm'])
@@ -176,7 +182,6 @@ class EvaluationTrainer(BaseTrainer):
         else:
             with torch.no_grad():
                 output = self.model(x=x, masks=masks, labels=labels, domains=domains)  # domains is ignored for now
-                logits = output['logits']
                 loss = output['loss']
 
         results = {'accuracy': output['acc'], 'loss': loss.item()}

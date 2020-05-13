@@ -148,6 +148,6 @@ def init_logging(log_path=LOG_PATH, log_level=logging.DEBUG):
     rootLogger.addHandler(fileHandler)
 
     # This allows logs to be printed on console as well.
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setFormatter(logFormatter)
-    rootLogger.addHandler(consoleHandler)
+    # consoleHandler = logging.StreamHandler()
+    # consoleHandler.setFormatter(logFormatter)
+    # rootLogger.addHandler(consoleHandler)

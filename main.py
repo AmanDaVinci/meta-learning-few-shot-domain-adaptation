@@ -3,6 +3,7 @@ import importlib
 from meta_infomax.trainers.multitask_trainer import MultitaskTrainer
 from meta_infomax.trainers.maml_trainer import MAMLTrainer
 from meta_infomax.trainers.fomaml_trainer import FOMAMLTrainer
+from meta_infomax.trainers.protonet_trainer import ProtonetTrainer
 
 from meta_infomax.trainers.evaluation_trainer import EvaluationTrainer
 
@@ -32,7 +33,7 @@ def main():
     elif trainer_type == MAML_TRAINER:
         trainer = FOMAMLTrainer(config_module.config)
     elif trainer_type == PROTOTYPICAL_TRAINER:
-        pass # ProtoTrainer(config_module.config)
+        trainer = ProtonetTrainer(config_module.config)
     elif trainer_type == EVALUATION_TRAINER:
         trainer = EvaluationTrainer(config_module.config)
     if args.train:

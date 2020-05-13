@@ -1,39 +1,42 @@
+import tarfile
+
+import logging
+import os
+import pandas as pd
+import shutil
+import torch
+import tqdm
+import urllib.request
+import numpy as np
 from pathlib import Path
 from sklearn.model_selection import train_test_split
-from torchtext.data import Field, LabelField, TabularDataset, Dataset
-from typing import List, Dict, Union
-import shutil
-import urllib.request
-import tarfile
-import os
-import logging
-import tqdm
-import torch    
-from torch.utils.data import Dataset, DataLoader, TensorDataset, SequentialSampler,\
-        RandomSampler, BatchSampler
-import pandas as pd
-pd.options.mode.chained_assignment = None # ignore annoying pandas warnings
+from torch.utils.data import Dataset, DataLoader
+from typing import List, Dict
+from collections.abc import Iterable
+
+pd.options.mode.chained_assignment = None  # ignore annoying pandas warnings
 
 DATASETS = ['apparel', 'baby', 'books', 'camera_photo', 'electronics',
             'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines',
             'music', 'software', 'sports_outdoors', 'toys_games', 'video']
-    
+
+
 class SingleTaskDataset(Dataset):
     def __init__(self, data):
         """Simple wrapper dataset around a DataFrame."""
         self.data = data
-        
+
     def __getitem__(self, idx):
         return self.data.loc[idx, :].to_dict()
-    
+
     def __len__(self):
         return len(self.data)
 
 
 class MultiTaskDataset(Dataset):
-    def __init__(self, tokenizer, data_dir='data/mtl-dataset/', split: str='train', collapse_domains: bool=True,
+    def __init__(self, tokenizer, data_dir='data/mtl-dataset/', split: str = 'train', collapse_domains: bool = True,
                  keep_datasets: List[str] = DATASETS, validation_size: float = 0.2, min_count: int = 0,
-                 random_state: int = 42, load: bool=True, save: bool=True):
+                 random_state: int = 42, load: bool = True, save: bool = True):
         """
         Dataset class for multi task learning.
         
@@ -73,7 +76,8 @@ class MultiTaskDataset(Dataset):
         self.keep_datasets = keep_datasets
         self.random_state = random_state
         # load and process data
-        store_processed = self.data_dir / (self.split + f'_random-{random_state}' + f'_valsize-{validation_size}' + '_processed_data.pt')
+        store_processed = self.data_dir / (
+                self.split + f'_random-{random_state}' + f'_valsize-{validation_size}' + '_processed_data.pt')
         if store_processed.exists() and load:
             logging.info(f'loading data from file: {store_processed}')
             self.data = torch.load(store_processed)
@@ -85,8 +89,8 @@ class MultiTaskDataset(Dataset):
         # filter rows with domain in keep_datasets
         self.data = self.data.loc[self.data['domain'].isin(keep_datasets), :].reset_index(drop=True)
         self.collator = MultiTaskCollator(tokenizer)
-        
-    def _read_datasets(self, validation_size=0.2):
+
+    def _read_datasets(self, validation_size: float = 0.2):
         """
         Read datasets from file. If data directory does not exist, downloads data.
         
@@ -100,7 +104,7 @@ class MultiTaskDataset(Dataset):
             Appropriate datasplit with fields 'label', 'text', and 'domain'.
         """
         dfs = []
-        col_names=['label', 'text']
+        col_names = ['label', 'text']
         if not self.data_dir.exists():
             download_and_extract_fudan(self.data_dir)
         for idx, dataset in enumerate(DATASETS):
@@ -109,13 +113,13 @@ class MultiTaskDataset(Dataset):
             if self.split in ('train', 'val', 'all'):
                 train_file = dataset + '.task.train'
                 train_val_set = pd.read_csv(self.data_dir / train_file, sep='\t', header=None, names=col_names)
-                if validation_size == 0: # only do split when validation_size > 0
+                if validation_size == 0:  # only do split when validation_size > 0
                     train_set = train_val_set
                 else:
                     train_set, val_set = train_test_split(train_val_set, test_size=validation_size,
-                                                                random_state=self.random_state)
+                                                          random_state=self.random_state)
                     val_set['domain'] = dataset
-                train_set['domain'] = dataset # record which domain it is in dataframe
+                train_set['domain'] = dataset  # record which domain it is in dataframe
             elif self.split in ('test', 'all'):
                 test_file = dataset + '.task.test'
                 test_set = pd.read_csv(self.data_dir / test_file, sep='\t', header=None, names=col_names)
@@ -124,8 +128,8 @@ class MultiTaskDataset(Dataset):
                 dfs.extend([train_set, val_set, test_set])
             else:
                 dfs.append({'train': train_set, 'val': val_set, 'test': test_set}[self.split])
-        return pd.concat(dfs, ignore_index=True).dropna().reset_index(drop=True) # ignore nan values
-    
+        return pd.concat(dfs, ignore_index=True).dropna().reset_index(drop=True)  # ignore nan values
+
     def _tokenize_data(self, texts, tokenizer):
         """
         Tokenize and map to int (aka encode) iterable of texts with tokenizer.
@@ -144,14 +148,14 @@ class MultiTaskDataset(Dataset):
         logging.getLogger("transformers.tokenization_utils").setLevel(logging.ERROR)
         logging.info('tokenizing data..')
         tokenized = []
-        for text in tqdm.tqdm(texts):
+        for text in tqdm.tqdm(texts, leave=False):
             tokenized.append(
                 tokenizer.encode(text, add_special_tokens=False)
             )
         # set back to original logging
         logging.getLogger("transformers.tokenization_utils").setLevel(logging.WARNING)
         return tokenized
-    
+
     def get_subset(self, domain=None, label=None):
         """Get all the data for a single domain.
         
@@ -175,7 +179,7 @@ class MultiTaskDataset(Dataset):
             mask = mask & (self.data.label == label)
 
         return SingleTaskDataset(self.data[mask].reset_index(drop=True))
-    
+
     def subset_datasets(self, domains=None, label=None):
         """
         Create datasets for each domain given in domains and filter on label if given.
@@ -222,7 +226,7 @@ class MultiTaskDataset(Dataset):
         if domains is None:
             return DataLoader(self.get_subset(label=label), **kwargs)
         return self.domain_dataloaders(domains=domains, label=label, **kwargs)
-            
+
     def domain_dataloaders(self, domains=None, label=None, **kwargs):
         """
         Create dataloaders for each domain given in domains. Optionally filter on label.
@@ -246,14 +250,15 @@ class MultiTaskDataset(Dataset):
         domain_datasets = self.subset_datasets(domains=domains, label=label)
         for domain in domains:
             assert domain in self.keep_datasets, 'make sure domain is in available domains.'
-            result[domain] = DataLoader(domain_datasets[domain], **kwargs)
+            result[domain] = DataLoader(domain_datasets[domain], collate_fn=self.collator, **kwargs)
         return result
-    
+
     def __getitem__(self, idx):
         return self.data.loc[idx, :].to_dict()
-    
+
     def __len__(self):
         return len(self.data)
+
 
 class MultiTaskCollator:
     def __init__(self, tokenizer):
@@ -290,16 +295,19 @@ class MultiTaskCollator:
 
         # calculate max batch len for batching
         max_batch_len = max(len(x) for x in tokenizeds)
-        max_batch_len = min(max_batch_len, 512) # 512 is our absolute max
+        max_batch_len = min(max_batch_len, 512)  # 512 is our absolute max
+        max_batch_len = 512
 
         for tokenized_sequence in tokenizeds:
             input_dict = self.tokenizer.prepare_for_model(tokenized_sequence,
-                                                     max_length=max_batch_len, pad_to_max_length=True)
+                                                          max_length=max_batch_len,
+                                                          pad_to_max_length=True)
 
             input_ids.append(input_dict['input_ids'])
             attention_masks.append(input_dict['attention_mask'])
         return {'x': torch.tensor(input_ids), 'masks': torch.tensor(attention_masks), 'labels': torch.tensor(labels),
                'domains': domains}
+
 
 def download_and_extract_fudan(data_dir):
     """

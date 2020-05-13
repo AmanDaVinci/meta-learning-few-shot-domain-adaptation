@@ -1,24 +1,16 @@
-from pathlib import Path
+import copy
+import csv
+import logging
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
 from pathlib import Path
-from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import DataLoader
-from transformers import get_linear_schedule_with_warmup, AdamW
-from typing import Dict
-import logging
+from torch import optim
 from tqdm import tqdm
-import csv
+from transformers import AdamW
+from typing import Dict
 
-from meta_infomax.models.feed_forward import FeedForward
-from meta_infomax.models.sentiment_classifier import SentimentClassifier
-from meta_infomax.datasets import utils
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
-
-
-from meta_infomax.trainers.super_trainer import BaseTrainer
+from meta_infomax.trainers.super_trainer import BaseTrainer, RESULTS, LOG_DIR
 
 
 class EvaluationTrainer(BaseTrainer):
@@ -49,37 +41,36 @@ class EvaluationTrainer(BaseTrainer):
                 'test_domains': ['music', 'video'],
             }
         """
-        # TODO: Load checkpoint
+        config['log_dir'] = RESULTS / config['exp_name'] / 'evaluation' / LOG_DIR
         super().__init__(config)
-        self.model_state_dict = self.model.state_dict() # we have to re init at every evaluation
-        self.bert_opt_dict = self.bert_opt.state_dict()
-        self.ffn_opt_dict = self.ffn_opt.state_dict()
+        self.load_checkpoint(config['exp_name'])
+        self.eval_dir = self.exp_dir / 'evaluation' # we save results here
+        self.model_state_dict = self.model.state_dict()  # we have to re init at every evaluation
+
         # for now, we say that the training data, is the train split of every train domain
         # we could eventually also include the test split of the train_domain
         train_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
-                        keep_datasets=config['test_domains'],
-                        random_state=config['random_state'], validation_size=0.8)
-        val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
-                        keep_datasets=config['test_domains'],
-                        random_state=config['random_state'], validation_size=0.8)
+                                      keep_datasets=config['test_domains'],
+                                      random_state=config['random_state'], validation_size=0.8)
+        val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='val',
+                                    keep_datasets=config['test_domains'],
+                                    random_state=config['random_state'], validation_size=0.8)
 
         # we sample 1 batch of k samples, train on those samples for `epoch` steps,
         # and evaluate on the val set
         # we assume (for now) that k is small enough to fit in memory
-        self.train_loader_positive = train_data.domain_dataloaders(label=1, batch_size=config['k_shot'], collate_fn=train_data.collator,
-                                                        shuffle=True)
-        self.train_loader_negative = train_data.domain_dataloaders(label=0, batch_size=config['k_shot'], collate_fn=train_data.collator,
-                                                        shuffle=True)
+        self.train_loader_positive = train_data.domain_dataloaders(label=1,
+                                                                   batch_size=config['k_shot'],
+                                                                   shuffle=True)
+        self.train_loader_negative = train_data.domain_dataloaders(label=0,
+                                                                   batch_size=config['k_shot'],
+                                                                   shuffle=True)
         # make iterators for each dataset
         for domain in self.config['test_domains']:
-            self.train_loader_positive[domain] = iter(self.train_loader_positive[domain]) 
-            self.train_loader_negative[domain] = iter(self.train_loader_negative[domain]) 
-        self.val_loader = val_data.domain_dataloaders(batch_size=config['batch_size'], collate_fn=val_data.collator,
-                                                        shuffle=False)
+            self.train_loader_positive[domain] = iter(self.train_loader_positive[domain])
+            self.train_loader_negative[domain] = iter(self.train_loader_negative[domain])
 
-        # self.bert_scheduler = get_linear_schedule_with_warmup(self.bert_opt,
-        #                                                       num_warmup_steps=config['warmup_steps'],
-        #                                                       num_training_steps=config['epochs'])
+        self.val_loader = val_data.domain_dataloaders(batch_size=config['batch_size'], shuffle=False)
 
     def run(self):
         """ Run the train-eval loop
@@ -88,21 +79,27 @@ class EvaluationTrainer(BaseTrainer):
         """
         try:
             for i in range(self.config['n_evaluations']):
+                self.evaluation_ix = i
                 logging.info(f"Begin evaluation {i + 1}/{self.config['n_evaluations']}")
                 self.evaluate()
         except KeyboardInterrupt:
             logging.info("Manual interruption registered. Please wait to finalize...")
-            self.save_checkpoint()
-
+            # self.save_checkpoint()
 
     def evaluate(self):
         """
         Train for a few steps on k samples for the 2 classes and evaluate on the test set.
         """
         for domain in self.config['test_domains']:
-            self.model.load_state_dict(self.model_state_dict) # we have to re init at every evaluation
-            self.bert_opt.load_state_dict(self.bert_opt_dict) # we have to re init at every evaluation
-            self.ffn_opt.load_state_dict(self.ffn_opt_dict) # we have to re init at every evaluation
+            # we have to re init at every evaluation
+            self.current_iter = 0
+            self.model.load_state_dict(copy.deepcopy(self.model_state_dict))
+            self.ffn_opt = optim.Adam(self.model.head.parameters())
+            self.bert_opt = AdamW(self.model.encoder.parameters(),
+                                  lr=self.config['lr'],
+                                  correct_bias=False,
+                                  weight_decay=self.config['weight_decay'])
+
             logging.info(f"Begin training on domain {domain} for {self.config['epochs']} epochs")
             self.train(domain)
             self.validate(domain)
@@ -114,22 +111,33 @@ class EvaluationTrainer(BaseTrainer):
         # sample k positive and negative samples, and train epoch steps on those
         positive_batch = next(self.train_loader_positive[domain])
         negative_batch = next(self.train_loader_negative[domain])
+
+        # combine the samples in one big batch and shuffle them
+        samples = {}
+        shuffle_idx = torch.randperm(len(positive_batch['x']))
+        for k in positive_batch.keys():
+            if isinstance(positive_batch[k], list):
+                samples[k] = []
+                samples[k].extend(positive_batch[k])
+                samples[k].extend(negative_batch[k])
+            else:
+                samples[k] = torch.cat([positive_batch[k], negative_batch[k]])
+                samples[k] = samples[k][shuffle_idx]
+
         for epoch in range(self.config['epochs']):
             self.current_epoch = epoch
-
             self.current_iter += 1
-            results_positive = self._batch_iteration(positive_batch, training=True)
-            results_negative = self._batch_iteration(negative_batch, training=True)
-            
-            acc = (results_positive['accuracy'] + results_negative['accuracy']) / 2
-            loss = (results_positive['loss'] + results_negative['loss']) / 2
-            # TODO: also write to csv file every log_freq steps
-            self.writer.add_scalar('Accuracy/Train', acc, self.current_iter)
-            self.writer.add_scalar('Loss/Train', loss, self.current_iter)
-            # TODO: only every log_freq steps
-            logging.info(f"EPOCH:{epoch}\t Accuracy: {acc:.3f} Loss: {loss:.3f}")
 
-    
+            results = self._batch_iteration(samples, training=True)
+
+            acc = results['accuracy']
+            loss = results['loss']
+
+            self.writer.add_scalar(f'Evaluation-{self.evaluation_ix}/Accuracy/Train', acc, self.current_iter)
+            self.writer.add_scalar(f'Evaluation-{self.evaluation_ix}/Loss/Train', loss, self.current_iter)
+
+            logging.info(f"EPOCH:{epoch+1}\t Accuracy: {acc:.3f} Loss: {loss:.3f}")
+
     def validate(self, domain):
         """ Main validation loop """
         losses = []
@@ -138,28 +146,24 @@ class EvaluationTrainer(BaseTrainer):
         val_loader = self.val_loader[domain]
 
         logging.info("***** Running evaluation *****")
-        with torch.no_grad():
-            for i, batch in enumerate(tqdm(val_loader)):
-                results = self._batch_iteration(batch, training=False)
-                losses.append(results['loss'])
-                accuracies.append(results['accuracy'])
-            
+        for i, batch in enumerate(tqdm(val_loader, leave=False)):
+            results = self._batch_iteration(batch, training=False)
+            losses.append(results['loss'])
+            accuracies.append(results['accuracy'])
+
         mean_accuracy = np.mean(accuracies)
         mean_loss = np.mean(losses)
-        if mean_accuracy > self.best_accuracy:
-            self.best_accuracy = mean_accuracy
-            self.save_checkpoint(self.BEST_MODEL_FNAME)
-        self.writer.add_scalar('Accuracy/Valid', mean_accuracy, self.current_iter)
-        self.writer.add_scalar('Loss/Valid', mean_loss, self.current_iter)
-        
-        report = (f"[Validation]\t"
+
+        report = ("[Validation]\t"
+                  f"Domain {domain} "
                   f"Accuracy: {mean_accuracy:.3f} "
                   f"Total Loss: {mean_loss:.3f}")
+        logging.info(report)
+
         # write result
         with open(Path(self.log_dir) / 'eval_result.csv', 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter='\t', quoting=csv.QUOTE_MINIMAL)
             writer.writerow([self.config['k_shot'], self.config['epochs'], domain, mean_loss, mean_accuracy])
-        logging.info(report)
 
     def _batch_iteration(self, batch: tuple, training: bool):
         """ Iterate over one batch """
@@ -173,18 +177,15 @@ class EvaluationTrainer(BaseTrainer):
         if training:
             self.bert_opt.zero_grad()
             self.ffn_opt.zero_grad()
-            output = self.model(x=x, masks=masks, labels=labels, domains=domains) # domains is ignored for now
-            logits = output['logits']
+            output = self.model(x=x, masks=masks, labels=labels, domains=domains)  # domains is ignored for now
             loss = output['loss']
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['clip_grad_norm'])
             self.bert_opt.step()
-            # self.bert_scheduler.step()
             self.ffn_opt.step()
         else:
             with torch.no_grad():
-                output = self.model(x=x, masks=masks, labels=labels, domains=domains) # domains is ignored for now
-                logits = output['logits']
+                output = self.model(x=x, masks=masks, labels=labels, domains=domains)  # domains is ignored for now
                 loss = output['loss']
 
         results = {'accuracy': output['acc'], 'loss': loss.item()}

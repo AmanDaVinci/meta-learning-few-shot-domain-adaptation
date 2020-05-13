@@ -1,22 +1,12 @@
-from pathlib import Path
+import logging
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from pathlib import Path
-from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
-from transformers import get_linear_schedule_with_warmup, AdamW
-from typing import Dict
-import logging
 from tqdm import tqdm
+from transformers import get_linear_schedule_with_warmup
+from typing import Dict
 
-from meta_infomax.models.feed_forward import FeedForward
-from meta_infomax.models.sentiment_classifier import SentimentClassifier
-from meta_infomax.datasets import utils
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
-
-
 from meta_infomax.trainers.super_trainer import BaseTrainer
 
 
@@ -53,35 +43,34 @@ class MultitaskTrainer(BaseTrainer):
         # for now, we say that the training data, is the train split of every train domain
         # we could eventually also include the test split of the train_domain
         train_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
-                        keep_datasets=config['train_domains'],
-                        random_state=config['random_state'], validation_size=0)
+                                      keep_datasets=config['train_domains'],
+                                      random_state=config['random_state'], validation_size=0)
         val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
-                        keep_datasets=config['val_domains'],
-                        random_state=config['random_state'], validation_size=0)
+                                    keep_datasets=config['val_domains'],
+                                    random_state=config['random_state'], validation_size=0)
         test_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
-                        keep_datasets=config['test_domains'],
-                        random_state=config['random_state'], validation_size=0)
+                                     keep_datasets=config['test_domains'],
+                                     random_state=config['random_state'], validation_size=0)
 
         if config['collapse_domains']:
             self.train_loader = DataLoader(train_data, batch_size=config['batch_size'],
                                            collate_fn=train_data.collator, shuffle=True)
             self.val_loader = DataLoader(val_data, batch_size=config['batch_size'],
-                                           collate_fn=train_data.collator, shuffle=False)
+                                         collate_fn=val_data.collator, shuffle=False)
             self.test_loader = DataLoader(test_data, batch_size=config['batch_size'],
-                                           collate_fn=train_data.collator, shuffle=False)
+                                          collate_fn=test_data.collator, shuffle=False)
         else:
             # loaders are now dicts mapping from domains to individual loaders
             self.train_loader = train_data.domain_dataloaders(batch_size=config['batch_size'], collate_fn=train_data.collator,
-                                                            shuffle=True)
+                                                              shuffle=True)
             self.val_loader = val_data.domain_dataloaders(batch_size=config['batch_size'], collate_fn=val_data.collator,
-                                                            shuffle=False)
+                                                          shuffle=False)
             self.test_loader = test_data.domain_dataloaders(batch_size=config['batch_size'], collate_fn=test_data.collator,
                                                             shuffle=False)
 
         self.bert_scheduler = get_linear_schedule_with_warmup(self.bert_opt,
                                                               num_warmup_steps=config['warmup_steps'],
-                                                              num_training_steps=len(self.train_loader) *
-                                                              config['epochs'])
+                                                              num_training_steps=len(self.train_loader) * config['epochs'])
 
     def train(self):
         """Main training loop."""
@@ -93,20 +82,21 @@ class MultitaskTrainer(BaseTrainer):
         for epoch in range(self.current_epoch, self.config['epochs']):
             self.current_epoch = epoch
 
-            for i, batch in enumerate(tqdm(self.train_loader)):
+            for i, batch in enumerate(self.train_loader):
                 self.current_iter += 1
                 results = self._batch_iteration(batch, training=True)
-                
-                # TODO: also write to csv file every log_freq steps
+
                 self.writer.add_scalar('Accuracy/Train', results['accuracy'], self.current_iter)
                 self.writer.add_scalar('Loss/Train', results['loss'], self.current_iter)
+
                 # TODO: only every log_freq steps
-                logging.info(f"EPOCH:{epoch} STEP:{i}\t Accuracy: {results['accuracy']:.3f} Loss: {results['loss']:.3f}")
+                # TODO: also write to csv file every log_freq steps
+                if self.current_iter % self.config['log_freq'] == 0:
+                    logging.info(f"EPOCH:{epoch} STEP:{i}\t Accuracy: {results['accuracy']:.3f} Loss: {results['loss']:.3f}")
 
                 if self.current_iter % self.config['valid_freq'] == 0:
                     self.validate()
 
-    
     def validate(self):
         """ Main validation loop """
         losses = []
@@ -114,11 +104,11 @@ class MultitaskTrainer(BaseTrainer):
 
         logging.info("***** Running evaluation *****")
         with torch.no_grad():
-            for i, batch in enumerate(tqdm(self.val_loader)):
+            for i, batch in enumerate(tqdm(self.val_loader, leave=False)):
                 results = self._batch_iteration(batch, training=False)
                 losses.append(results['loss'])
                 accuracies.append(results['accuracy'])
-            
+
         mean_accuracy = np.mean(accuracies)
         mean_loss = np.mean(losses)
         if mean_accuracy > self.best_accuracy:
@@ -126,7 +116,7 @@ class MultitaskTrainer(BaseTrainer):
             self.save_checkpoint(self.BEST_MODEL_FNAME)
         self.writer.add_scalar('Accuracy/Valid', mean_accuracy, self.current_iter)
         self.writer.add_scalar('Loss/Valid', mean_loss, self.current_iter)
-        
+
         report = (f"[Validation]\t"
                   f"Accuracy: {mean_accuracy:.3f} "
                   f"Total Loss: {np.mean(losses):.3f}")
@@ -144,7 +134,7 @@ class MultitaskTrainer(BaseTrainer):
         if training:
             self.bert_opt.zero_grad()
             self.ffn_opt.zero_grad()
-            output = self.model(x=x, masks=masks, labels=labels, domains=domains) # domains is ignored for now
+            output = self.model(x=x, masks=masks, labels=labels, domains=domains)  # domains is ignored for now
             logits = output['logits']
             loss = output['loss']
             loss.backward()
@@ -154,7 +144,7 @@ class MultitaskTrainer(BaseTrainer):
             self.ffn_opt.step()
         else:
             with torch.no_grad():
-                output = self.model(x=x, masks=masks, labels=labels, domains=domains) # domains is ignored for now
+                output = self.model(x=x, masks=masks, labels=labels, domains=domains)  # domains is ignored for now
                 logits = output['logits']
                 loss = output['loss']
 

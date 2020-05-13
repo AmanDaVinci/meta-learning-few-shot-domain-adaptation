@@ -1,7 +1,6 @@
-
 import torch
 import torch.nn as nn
-from typing import Union, List, Dict
+from typing import Union, List
 from torch.nn import functional as F
 
 
@@ -44,15 +43,15 @@ class FeedForward(nn.Module):
         if not isinstance(dropout, list):
             dropout = [dropout] * num_layers  # type: ignore
         if len(hidden_dims) != num_layers:
-            raise ConfigurationError(
+            raise ValueError(
                 "len(hidden_dims) (%d) != num_layers (%d)" % (len(hidden_dims), num_layers)
             )
         if len(activations) != num_layers:
-            raise ConfigurationError(
+            raise ValueError(
                 "len(activations) (%d) != num_layers (%d)" % (len(activations), num_layers)
             )
         if len(dropout) != num_layers:
-            raise ConfigurationError(
+            raise ValueError(
                 "len(dropout) (%d) != num_layers (%d)" % (len(dropout), num_layers)
             )
         self._activations = activations
@@ -77,16 +76,13 @@ class FeedForward(nn.Module):
             output = inputs
             for layer, activation, dropout in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
                 output = dropout(activation(layer(output)))
-
             output = self._linear_layers[-1](output)
         else:
-
             output = inputs
             layer_ind = 0
-            for layer, activation, dropout in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
+            for _, _, _ in zip(self._linear_layers[:-1], self._activations[:-1], self._dropout[:-1]):
                 output = F.dropout(F.relu(F.linear(output, custom_params[layer_ind], custom_params[layer_ind+1])), 0.0)
                 layer_ind += 2
-            
             output = F.linear(output, custom_params[-2], custom_params[-1])
-   
+
         return output

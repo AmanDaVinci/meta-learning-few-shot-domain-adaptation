@@ -16,7 +16,7 @@ def accuracy(y_pred: torch.Tensor, y: torch.Tensor) -> float:
     y: torch.Tensor (BATCH,)
         Real class values.
     """
-    return (y_pred.argmax(dim = 1) == y).float().mean().item()
+    return (y_pred.argmax(dim=1) == y).float().mean().item()
 
 
 class SentimentClassifier(nn.Module):
@@ -36,13 +36,13 @@ class SentimentClassifier(nn.Module):
         self.head = head
         self.num_classes = 2
         self.criterion = torch.nn.CrossEntropyLoss()
-        self.pooler = pooler if pooler is not None else lambda x: x[0][:,0] # get CLS embedding for each sentence in batch
+        self.pooler = pooler if pooler is not None else lambda x: x[0][:, 0]  # get CLS embedding for each sentence in batch
 
     def forward(self,
                 x: torch.Tensor,
                 masks: torch.Tensor = None,
                 labels: torch.LongTensor = None,
-                domains: List[str]=None) -> Dict[str, torch.Tensor]:
+                domains: List[str] = None) -> Dict[str, torch.Tensor]:
         """
         Parameters
         ----------
@@ -129,9 +129,9 @@ class SentimentClassifier(nn.Module):
         """
         predictions = output_dict['class_probabilities'].cpu().data.numpy()
         argmax_indices = np.argmax(predictions, axis=-1)
-#         labels = [self.vocab.get_token_from_index(x, namespace="labels")
-#                   for x in argmax_indices]
-        labels = -1 # TODO
+        #         labels = [self.vocab.get_token_from_index(x, namespace="labels")
+        #                   for x in argmax_indices]
+        labels = -1  # TODO
         output_dict['label'] = labels
         return output_dict
 

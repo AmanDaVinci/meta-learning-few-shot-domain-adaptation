@@ -1,26 +1,22 @@
-from pathlib import Path
-import numpy as np
+import logging
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import DataLoader
-from transformers import get_linear_schedule_with_warmup, AdamW
+from transformers import AdamW
 from typing import Dict
-import logging
 
+from meta_infomax.datasets import utils
 from meta_infomax.models.feed_forward import FeedForward
 from meta_infomax.models.sentiment_classifier import SentimentClassifier
-from meta_infomax.datasets import utils
-from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
 
 RESULTS = Path("results")
 CHECKPOINTS = Path("checkpoints")
 LOG_DIR = Path("logs")
 
 
-class BaseTrainer():
+class BaseTrainer:
     """Train to classify sentiment across different domains/tasks"""
 
     def __init__(self, config: Dict):
@@ -54,12 +50,18 @@ class BaseTrainer():
         self.checkpoint_dir = CHECKPOINTS / config['exp_name']
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        self.exp_dir = RESULTS / config['exp_name']
+        if 'exp_dir' in config:
+            self.exp_dir = config['exp_dir']
+        else:
+            self.exp_dir = RESULTS / config['exp_name']
         self.exp_dir.mkdir(parents=True, exist_ok=True)
-        self.log_dir = self.exp_dir / LOG_DIR
+        if 'log_dir' in config:
+            self.log_dir = config['log_dir']
+        else:
+            self.log_dir = self.exp_dir / LOG_DIR
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.writer = SummaryWriter(log_dir=self.log_dir)
-        utils.init_logging(log_path=self.log_dir, log_level=config['log_level']) # initialize logging
+        utils.init_logging(log_path=self.log_dir, log_level=config['log_level'])  # initialize logging
         logging.info(f'Config Setting:\n{config}')
 
         # TODO: set dropout
@@ -74,15 +76,12 @@ class BaseTrainer():
 
         self.model.encoder_unfreeze_layers(layers=config['unfreeze_layers'])
         self.ffn_opt = optim.Adam(ffn.parameters())
-        # self.bert_opt = optim.AdamW(bert.parameters(), lr=2e-5, correct_bias=False)
-        self.bert_opt = AdamW(bert.parameters(), lr=config['lr'], correct_bias=False,
-                            weight_decay=config['weight_decay']) # use transformers AdamW
+        self.bert_opt = AdamW(bert.parameters(), lr=config['lr'], correct_bias=False, weight_decay=config['weight_decay'])
 
         # Init trackers
         self.current_iter = 0
         self.current_epoch = 0
         self.best_accuracy = 0.
-
 
     def run(self):
         """ Run the train-eval loop
@@ -99,14 +98,13 @@ class BaseTrainer():
     def train(self):
         """ Main training loop """
         print("implement class specific training main")
-    
+
     def validate(self):
         """ Main validation loop """
         print("implement class specific validation")
 
     def _batch_iteration(self, batch: tuple, training: bool):
         """ Iterate over one batch """
-
         print("implement class specific batch iteration")
 
     def save_checkpoint(self, file_name: str = None):
@@ -124,10 +122,30 @@ class BaseTrainer():
 
         file_name = self.checkpoint_dir / file_name
         state = {
+            # TODO: Save optimizer states?
             'epoch': self.current_epoch,
             'iter': self.current_iter,
             'best_accuracy': self.best_accuracy,
             'model_state': self.model.state_dict(),
         }
         torch.save(state, file_name)
-        print(f"Checkpoint saved @ {file_name}")
+        logging.info(f"Checkpoint saved @ {file_name}")
+
+    def load_checkpoint(self, experiment_name: str, file_name: str = None):
+        if file_name is None:
+            file_name = self.BEST_MODEL_FNAME
+
+        try:
+            file_name = CHECKPOINTS / experiment_name / file_name
+            logging.info(f"Loading checkpoint...")
+            checkpoint = torch.load(file_name, map_location=self.config["device"])
+
+            self.current_epoch = checkpoint['epoch']
+            self.current_iter = checkpoint['iter']
+            self.best_accuracy = checkpoint['best_accuracy']
+            self.model.load_state_dict(checkpoint['model_state'])
+            logging.info(f"Checkpoint loaded successfully from '{file_name}'\n")
+
+        except OSError:
+            logging.info(f"No checkpoint exists @ {self.checkpoint_dir}")
+            logging.info("**Training for the first time**")

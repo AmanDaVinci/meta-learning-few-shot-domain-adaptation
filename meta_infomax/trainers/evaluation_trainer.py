@@ -10,7 +10,7 @@ from transformers import AdamW
 from typing import Dict
 
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
-from meta_infomax.trainers.super_trainer import BaseTrainer
+from meta_infomax.trainers.super_trainer import BaseTrainer, RESULTS, LOG_DIR
 
 
 class EvaluationTrainer(BaseTrainer):
@@ -41,9 +41,11 @@ class EvaluationTrainer(BaseTrainer):
                 'test_domains': ['music', 'video'],
             }
         """
+        config['log_dir'] = RESULTS / config['exp_name'] / 'evaluation' / LOG_DIR
         super().__init__(config)
-        self.load_checkpoint(config['eval_experiment'])
-        self.model_state_dict = copy.deepcopy(self.model.state_dict())  # we have to re init at every evaluation
+        self.load_checkpoint(config['exp_name'])
+        self.eval_dir = self.exp_dir / 'evaluation' # we save results here
+        self.model_state_dict = self.model.state_dict()  # we have to re init at every evaluation
 
         # for now, we say that the training data, is the train split of every train domain
         # we could eventually also include the test split of the train_domain
@@ -77,6 +79,7 @@ class EvaluationTrainer(BaseTrainer):
         """
         try:
             for i in range(self.config['n_evaluations']):
+                self.evaluation_ix = i
                 logging.info(f"Begin evaluation {i + 1}/{self.config['n_evaluations']}")
                 self.evaluate()
         except KeyboardInterrupt:
@@ -89,7 +92,8 @@ class EvaluationTrainer(BaseTrainer):
         """
         for domain in self.config['test_domains']:
             # we have to re init at every evaluation
-            self.model.load_state_dict(self.model_state_dict)
+            self.current_iter = 0
+            self.model.load_state_dict(copy.deepcopy(self.model_state_dict))
             self.ffn_opt = optim.Adam(self.model.head.parameters())
             self.bert_opt = AdamW(self.model.encoder.parameters(),
                                   lr=self.config['lr'],
@@ -129,8 +133,8 @@ class EvaluationTrainer(BaseTrainer):
             acc = results['accuracy']
             loss = results['loss']
 
-            self.writer.add_scalar('Accuracy/Train', acc, self.current_iter)
-            self.writer.add_scalar('Loss/Train', loss, self.current_iter)
+            self.writer.add_scalar(f'Evaluation-{self.evaluation_ix}/Accuracy/Train', acc, self.current_iter)
+            self.writer.add_scalar(f'Evaluation-{self.evaluation_ix}/Loss/Train', loss, self.current_iter)
 
             logging.info(f"EPOCH:{epoch+1}\t Accuracy: {acc:.3f} Loss: {loss:.3f}")
 

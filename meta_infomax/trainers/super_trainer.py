@@ -50,9 +50,15 @@ class BaseTrainer:
         self.checkpoint_dir = CHECKPOINTS / config['exp_name']
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        self.exp_dir = RESULTS / config['exp_name']
+        if 'exp_dir' in config:
+            self.exp_dir = config['exp_dir']
+        else:
+            self.exp_dir = RESULTS / config['exp_name']
         self.exp_dir.mkdir(parents=True, exist_ok=True)
-        self.log_dir = self.exp_dir / LOG_DIR
+        if 'log_dir' in config:
+            self.log_dir = config['log_dir']
+        else:
+            self.log_dir = self.exp_dir / LOG_DIR
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.writer = SummaryWriter(log_dir=self.log_dir)
         utils.init_logging(log_path=self.log_dir, log_level=config['log_level'])  # initialize logging

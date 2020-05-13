@@ -55,18 +55,18 @@ class FOMAMLTrainer(BaseTrainer):
                                      random_state=config['random_state'], validation_size=0)
 
         # loaders are now dicts mapping from domains to individual loaders
-        self.train_loader = train_data.domain_dataloaders(batch_size=config['k_shot_num'], collate_fn=train_data.collator,
+        self.train_loader = train_data.domain_dataloaders(batch_size=config['k_shot_num'],
                                                           shuffle=True)
-        self.val_loader = val_data.domain_dataloaders(batch_size=config['k_shot_num'], collate_fn=val_data.collator,
+        self.val_loader = val_data.domain_dataloaders(batch_size=config['k_shot_num'],
                                                       shuffle=False)
-        self.test_loader = test_data.domain_dataloaders(batch_size=config['k_shot_num'], collate_fn=test_data.collator,
+        self.test_loader = test_data.domain_dataloaders(batch_size=config['k_shot_num'],
                                                         shuffle=False)
 
         self.current_episode = 0
 
         self.ffn_opt = optim.Adam(self.model.head.parameters(), lr=self.config['meta_lr'])
 
-        self.bert_opt = AdamW(self.model.encoder.parameters(), lr=config['lr'], correct_bias=False,
+        self.bert_opt = AdamW(self.model.encoder.parameters(), lr=config['meta_lr'], correct_bias=False,
                               weight_decay=config['weight_decay'])  # use transformers AdamW
 
         self.bert_scheduler = get_linear_schedule_with_warmup(self.bert_opt,
@@ -96,11 +96,14 @@ class FOMAMLTrainer(BaseTrainer):
             logging.info(f"EPSIODE:{episode} Query_Accuracy: {results['accuracy']:.3f} Meta_Loss: {results['loss'].item():.3f}")
 
             # TODO add validation
-            # if self.current_episode % self.config['valid_freq'] == 0:
-            # self.fine_tune(mode = 'validate')
+            if self.current_episode % self.config['valid_freq'] == 0:
+                self.fine_tune(mode = 'validate')
 
     def fine_tune(self, mode):
         """ Main validation loop """
+
+        acc_total = 0
+        loss_total = 0
 
         if mode == 'validate':
             logging.info("***** Running evaluation *****")
@@ -113,9 +116,11 @@ class FOMAMLTrainer(BaseTrainer):
 
         for episode in episodes:
             results = self.outer_loop(domains, mode=mode)
+            acc_total += results['accuracy']
+            loss_total += results['loss']
 
-        mean_accuracy = results['accuracy']
-        mean_loss = results['loss']
+        mean_accuracy = acc_total / (episode + 1)
+        mean_loss = results['loss'] / (episode + 1)
         if mean_accuracy > self.best_accuracy:
             self.best_accuracy = mean_accuracy
             self.save_checkpoint(self.BEST_MODEL_FNAME)
@@ -153,39 +158,47 @@ class FOMAMLTrainer(BaseTrainer):
             meta_acc += results["accuracy"]
 
         ### updating main parameters - head
-
+        
+        if mode == "training":
         ## summing domain grads
-        sum_grads_head = domain_grads_head[0]
-        for grad_ind in range(1, len(domain_grads_head)):
-            for layer_ind in range(len(domain_grads_head[grad_ind])):
-                sum_grads_head[layer_ind] += domain_grads_head[grad_ind][layer_ind]
 
-        bert_grad_keys = domain_grads_bert[0].keys()
-        sum_grads_bert = domain_grads_bert[0]
-        for grad_ind in range(1, len(domain_grads_bert)):
-            for layer_key in bert_grad_keys:
-                sum_grads_bert[layer_key] += domain_grads_bert[grad_ind][layer_key]
+            sum_grads_head = domain_grads_head[0]
+            for grad_ind in range(1, len(domain_grads_head)):
+                for layer_ind in range(len(domain_grads_head[grad_ind])):
+                    sum_grads_head[layer_ind] += domain_grads_head[grad_ind][layer_ind]
 
-        ### putting grads into the parameters
-        self.model.update_head_grads(sum_grads_head)
-        self.model.update_bert_grads(sum_grads_bert)
+            bert_grad_keys = domain_grads_bert[0].keys()
+            sum_grads_bert = domain_grads_bert[0]
+            for grad_ind in range(1, len(domain_grads_bert)):
+                for layer_key in bert_grad_keys:
+                    sum_grads_bert[layer_key] += domain_grads_bert[grad_ind][layer_key]
 
-        ## calling the update
-        self.ffn_opt.step()
-        self.bert_opt.step()
-        self.bert_scheduler.step()
+            ### putting grads into the parameters
+            self.model.update_head_grads(sum_grads_head)
+            self.model.update_bert_grads(sum_grads_bert)
 
-        self.ffn_opt.zero_grad()
-        self.bert_opt.zero_grad()
+            ## calling the update
+            self.ffn_opt.step()
+            self.bert_opt.step()
+            self.bert_scheduler.step()
+
+            self.ffn_opt.zero_grad()
+            self.bert_opt.zero_grad()
 
         meta_results = {"loss": meta_loss, "accuracy": meta_acc / len(domains)}
         return meta_results
 
-    def inner_loop(self, batch_iterator):
+    def inner_loop(self, batch_iterator, mode = 'training'):
         # send tensors to model device
+        
+        support_batch = next(batch_iterator)
+        support_x, support_masks, support_labels, support_domains = support_batch['x'], support_batch['masks'], support_batch[
+            'labels'], support_batch['domains']
+        support_x = support_x.to(self.config['device'])
+        support_masks = support_masks.to(self.config['device'])
+        support_labels = support_labels.to(self.config['device'])
 
         query_batch = next(batch_iterator)
-
         query_x, query_masks, query_labels, query_domains = query_batch['x'], query_batch['masks'], query_batch['labels'], \
                                                             query_batch['domains']
         query_x = query_x.to(self.config['device'])
@@ -198,17 +211,10 @@ class FOMAMLTrainer(BaseTrainer):
         fast_weight_net = deepcopy(self.model)
         self.ffn_opt_inner = optim.Adam(fast_weight_net.parameters(), lr=self.config['fast_weight_lr'])
 
+
+
         for grad_step in range(0, self.config['inner_gd_steps'] - 1):
-            support_batch = next(batch_iterator)
 
-            support_x, support_masks, support_labels, support_domains = support_batch['x'], support_batch['masks'], support_batch[
-                'labels'], support_batch['domains']
-            support_x = support_x.to(self.config['device'])
-            support_masks = support_masks.to(self.config['device'])
-            support_labels = support_labels.to(self.config['device'])
-
-            ## TODO implement for bert weights
-            ##self.bert_opt.zero_grad()
 
             output = fast_weight_net(x=support_x, masks=support_masks, labels=support_labels, domains=support_domains)
             logits = output['logits']
@@ -225,12 +231,17 @@ class FOMAMLTrainer(BaseTrainer):
         logits = output['logits']
         loss = output['loss']
 
-        loss.backward()
+        if mode == "training":
 
-        torch.nn.utils.clip_grad_norm_(fast_weight_net.parameters(), self.config['clip_grad_norm'])
+            loss.backward()
 
-        grad_head = fast_weight_net.get_head_grads()
-        grad_bert = fast_weight_net.get_bert_grads()
+            torch.nn.utils.clip_grad_norm_(fast_weight_net.parameters(), self.config['clip_grad_norm'])
+
+            grad_head = fast_weight_net.get_head_grads()
+            grad_bert = fast_weight_net.get_bert_grads()
+
+        elif mode == "validate" or mode == "test":
+            grad_head, grad_bert = None
 
         results = {'accuracy': output['acc'], 'loss': loss}
         return grad_head, grad_bert, results

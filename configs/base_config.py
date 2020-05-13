@@ -8,7 +8,7 @@ base_config = {
     'collapse_domains': True, # whether to load all datasets together or individually
     'epochs': 3,
     'batch_size': 16,
-    'valid_freq': 200,
+    'valid_freq': 10,
     'save_freq': 100,
     'unfreeze_layers': (10, 11), # layers of bert to unfreeze
     'clip_grad_norm': 1,

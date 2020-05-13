@@ -7,6 +7,7 @@ from pathlib import Path
 from torch import optim
 from tqdm import tqdm
 from transformers import AdamW
+import json
 from typing import Dict
 
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
@@ -44,8 +45,12 @@ class EvaluationTrainer(BaseTrainer):
         config['log_dir'] = RESULTS / config['exp_name'] / 'evaluation' / LOG_DIR
         super().__init__(config)
         self.load_checkpoint(config['exp_name'])
-        self.eval_dir = self.exp_dir / 'evaluation' # we save results here
-        self.model_state_dict = self.model.state_dict()  # we have to re init at every evaluation
+        eval_dir = f"kshot_{config['k_shot']}_lr_{config['lr']}_epochs_{config['epochs']}"
+        self.eval_dir = self.exp_dir / 'evaluation' / eval_dir # we save results here
+        self.eval_dir.mkdir(parents=True, exist_ok=True)
+        config['log_dir'] = config['log_dir'].as_posix() # Path not serializable
+        json.dump(config, open(self.eval_dir / 'config.json', 'w')) # write used parameters to file
+        self.model_state_dict = copy.deepcopy(self.model.state_dict())  # we have to re init at every evaluation
 
         # for now, we say that the training data, is the train split of every train domain
         # we could eventually also include the test split of the train_domain
@@ -77,14 +82,23 @@ class EvaluationTrainer(BaseTrainer):
         
         If the loop is interrupted manually, finalization will still be executed
         """
-        try:
-            for i in range(self.config['n_evaluations']):
-                self.evaluation_ix = i
-                logging.info(f"Begin evaluation {i + 1}/{self.config['n_evaluations']}")
-                self.evaluate()
-        except KeyboardInterrupt:
-            logging.info("Manual interruption registered. Please wait to finalize...")
-            # self.save_checkpoint()
+        self.result_dict = {domain: {'acc': [], 'loss': []} for domain in self.config['test_domains']}
+
+        # evaluate n times
+        for i in range(self.config['n_evaluations']):
+            self.evaluation_ix = i
+            logging.info(f"Begin evaluation {i + 1}/{self.config['n_evaluations']}")
+            self.evaluate()
+        
+        # compute statistics and write to file
+        for domain, results in self.result_dict.items():
+            self.result_dict[domain]['mean_acc'] = np.array(results['acc']).mean()
+            self.result_dict[domain]['mean_loss'] = np.array(results['loss']).mean()
+            self.result_dict[domain]['std_acc'] = np.array(results['acc']).std()
+            self.result_dict[domain]['std_loss'] = np.array(results['loss']).std()
+
+        json.dump(self.result_dict, open(self.eval_dir / 'eval_result.json', 'w'))
+
 
     def evaluate(self):
         """
@@ -102,7 +116,9 @@ class EvaluationTrainer(BaseTrainer):
 
             logging.info(f"Begin training on domain {domain} for {self.config['epochs']} epochs")
             self.train(domain)
-            self.validate(domain)
+            acc, loss = self.validate(domain)
+            self.result_dict[domain]['acc'].append(acc)
+            self.result_dict[domain]['loss'].append(loss)
 
     def train(self, domain):
         """Main training loop."""
@@ -160,10 +176,7 @@ class EvaluationTrainer(BaseTrainer):
                   f"Total Loss: {mean_loss:.3f}")
         logging.info(report)
 
-        # write result
-        with open(Path(self.log_dir) / 'eval_result.csv', 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter='\t', quoting=csv.QUOTE_MINIMAL)
-            writer.writerow([self.config['k_shot'], self.config['epochs'], domain, mean_loss, mean_accuracy])
+        return mean_accuracy, mean_loss
 
     def _batch_iteration(self, batch: tuple, training: bool):
         """ Iterate over one batch """

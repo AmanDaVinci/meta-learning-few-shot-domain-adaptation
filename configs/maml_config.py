@@ -10,10 +10,11 @@ new_config = {
     'collapse_domains' : False,
     'exp_name': 'maml_train',
     'episodes': 200,
-    'val_episodes' : 20,
+    'val_episodes' : 5,
     'test_episodes' : 5,
     'domain_sampling_strategy' : "uniform",
     'inner_gd_steps': 3,
+    'device': 'cpu',
 }
 
 config = get_config(base_config, new_config)

@@ -33,7 +33,7 @@ class SingleTaskDataset(Dataset):
 class MultiTaskDataset(Dataset):
     def __init__(self, tokenizer, data_dir='data/mtl-dataset/', split: str='train', collapse_domains: bool=True,
                  keep_datasets: List[str] = DATASETS, validation_size: float = 0.2, min_count: int = 0,
-                 random_state: int = 42, load: bool=True, save: bool=True):
+                 random_state: int = 42, load: bool=True, save: bool=True, const_len: bool = False):
         """
         Dataset class for multi task learning.
         
@@ -84,7 +84,7 @@ class MultiTaskDataset(Dataset):
                 torch.save(self.data, store_processed)
         # filter rows with domain in keep_datasets
         self.data = self.data.loc[self.data['domain'].isin(keep_datasets), :].reset_index(drop=True)
-        self.collator = MultiTaskCollator(tokenizer)
+        self.collator = MultiTaskCollator(tokenizer, const_len)
         
     def _read_datasets(self, validation_size=0.2):
         """
@@ -249,6 +249,23 @@ class MultiTaskDataset(Dataset):
             result[domain] = DataLoader(domain_datasets[domain], **kwargs)
         return result
     
+    def episodic_dataloaders(self, **kwargs):
+        """
+        Generating episodes where each support and query set belongs to a single label of one domain
+        
+        Parameters
+        ---
+        kwargs: keyword arguments for DataLoader.
+            
+        Returns
+        ---
+        Dict[str, DataLoader]
+        """
+        domains = self.keep_datasets
+        labels = [0, 1] # only two labels exists: pos and neg sentiment
+        dataloaders = [[DataLoader(self.get_subset(domain, label), **kwargs) for label in labels] for domain in domains]
+        return dataloaders
+
     def __getitem__(self, idx):
         return self.data.loc[idx, :].to_dict()
     
@@ -256,15 +273,19 @@ class MultiTaskDataset(Dataset):
         return len(self.data)
 
 class MultiTaskCollator:
-    def __init__(self, tokenizer):
+    def __init__(self, tokenizer, const_len=False):
         """
         Class to pass to Dataloader collate_fn argument. Dataloader calls __call__ method.
         
         Parameters
         ---
         tokenizer: transformer tokenizer supporting prepare_for_model method.
+        const_len: bool
+            If true all batches from different dataloaders will have the same sequence length.
+            false by default. 
         """
         self.tokenizer = tokenizer
+        self.const_len = const_len
 
     def __call__(self, inputs):
         """
@@ -289,8 +310,11 @@ class MultiTaskCollator:
         attention_masks = []
 
         # calculate max batch len for batching
-        max_batch_len = max(len(x) for x in tokenizeds)
-        max_batch_len = min(max_batch_len, 512) # 512 is our absolute max
+        if self.const_len:
+            max_batch_len = 512
+        else:
+            max_batch_len = max(len(x) for x in tokenizeds)
+            max_batch_len = min(max_batch_len, 512) # 512 is our absolute max
 
         for tokenized_sequence in tokenizeds:
             input_dict = self.tokenizer.prepare_for_model(tokenized_sequence,

@@ -62,6 +62,11 @@ class FOMAMLTrainer(BaseTrainer):
         self.test_loader = test_data.domain_dataloaders(batch_size=config['k_shot_num'],
                                                         shuffle=False)
 
+        ## define iterators
+        self.train_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.train_loader.items()}
+        self.val_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.val_loader.items()}
+        self.test_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.test_loader.items()}
+
         self.current_episode = 0
 
         self.ffn_opt = optim.Adam(self.model.head.parameters(), lr=self.config['meta_lr'])
@@ -138,15 +143,15 @@ class FOMAMLTrainer(BaseTrainer):
         meta_acc = 0
 
         if mode == 'training':
-            loader = self.train_loader
+            loader = self.train_loader_iterator
         elif mode == 'validate':
-            loader = self.val_loader
+            loader = self.val_loader_iterator
         elif mode == 'test':
-            loader = self.test_loader
+            loader = self.test_loader_iterator
 
         domain_grads_head = []
         domain_grads_bert = []
-        loader = {domain: iter(domain_loader) for domain, domain_loader in loader.items()}
+        
         for domain in domains:
             batch_iterator = loader[domain]
 

@@ -2,6 +2,7 @@ import importlib
 from meta_infomax.trainers.multitask_trainer import MultitaskTrainer
 from meta_infomax.trainers.maml_trainer import MAMLTrainer
 from meta_infomax.trainers.fomaml_trainer import FOMAMLTrainer
+from meta_infomax.trainers.protonet_trainer import ProtonetTrainer
 
 
 import argparse
@@ -20,15 +21,25 @@ def main():
     """ Runs the trainer based on the given experiment configuration """
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default="configs.evaluation_config", help='experiment configuration dict')
-    parser.add_argument('--trainer', default="MULTITASK_TRAINER", help='type of trainer model')
-
+    parser.add_argument('--trainer', default=None, type=str, help='Type of trainer model')
     parser.add_argument('--train', default=True, action='store_true', help='whether to train')
     # TODO: implement no_cuda
     parser.add_argument("--no_cuda", action="store_true", help='Whether not to use CUDA when available')
+    parser.add_argument("--lr", default=None, type=float, help='Learning rate. Overwrites config.')
+    parser.add_argument("--k_shot", default=None, type=int, help='K in K-shot evaluation.')
+    parser.add_argument("--batch_size", default=None, type=int, help='Train batch size.')
+    parser.add_argument("--epochs", default=None, type=int, help='How many epochs to train for.')
+    parser.add_argument("--n_evaluations", default=None, type=int, help='How many times to evaluate on test domains.')
     # parser.add_argument('--test', type=bool, help='whether to test')
     args = parser.parse_args()
 
     config_module = importlib.import_module(args.config)
+    for arg_name, value in args.__dict__.items():
+        # if a parameter is specified, overwrite config
+        if arg_name in config_module.config and value is not None:
+            config_module.config[arg_name] = value
+    if args.no_cuda:
+        config_module.config['device'] = 'cpu'
     trainer_type = config_module.config['trainer']
     assert trainer_type in (MULTITASK_TRAINER, MAML_TRAINER, PROTOTYPICAL_TRAINER, EVALUATION_TRAINER), \
         'Make sure you have specified a correct trainer.'
@@ -37,7 +48,7 @@ def main():
     elif trainer_type == MAML_TRAINER:
         trainer = FOMAMLTrainer(config_module.config)
     elif trainer_type == PROTOTYPICAL_TRAINER:
-        pass  # ProtoTrainer(config_module.config)
+        trainer = ProtonetTrainer(config_module.config)
     elif trainer_type == EVALUATION_TRAINER:
         trainer = EvaluationTrainer(config_module.config)
     if args.train:

@@ -55,11 +55,12 @@ class FOMAMLTrainer(BaseTrainer):
                                      random_state=config['random_state'], validation_size=0)
 
         # loaders are now dicts mapping from domains to individual loaders
-        self.train_loader = train_data.domain_dataloaders(batch_size=config['k_shot_num'],
+        ### k-shot is defined per class (pos/negative), so here we multiply by 2, as we just sample the whole data
+        self.train_loader = train_data.domain_dataloaders(batch_size=config['k_shot_num']*2,
                                                           shuffle=True)
-        self.val_loader = val_data.domain_dataloaders(batch_size=config['k_shot_num'],
+        self.val_loader = val_data.domain_dataloaders(batch_size=config['k_shot_num']*2,
                                                       shuffle=False)
-        self.test_loader = test_data.domain_dataloaders(batch_size=config['k_shot_num'],
+        self.test_loader = test_data.domain_dataloaders(batch_size=config['k_shot_num']*2,
                                                         shuffle=False)
 
         ## define iterators
@@ -203,7 +204,13 @@ class FOMAMLTrainer(BaseTrainer):
         support_masks = support_masks.to(self.config['device'])
         support_labels = support_labels.to(self.config['device'])
 
+        
         query_batch = next(batch_iterator)
+        if mode != 'training':
+            ### concatenating batches for a larger batch on query
+            for batch_ind in range(1, config['num_batches_for_query']):
+                query_batch = torch.cat((query_batch, next(batch_iterator))
+
         query_x, query_masks, query_labels, query_domains = query_batch['x'], query_batch['masks'], query_batch['labels'], \
                                                             query_batch['domains']
         query_x = query_x.to(self.config['device'])

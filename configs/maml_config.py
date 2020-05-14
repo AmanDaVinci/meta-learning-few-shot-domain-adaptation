@@ -4,6 +4,7 @@ from .base_config import base_config, get_config
 new_config = {
     'trainer' : 'maml',
     'k_shot_num' : 4,
+    'num_batches_for_query' : 8,        ## concatenate that many bacthes of size k-shot for validation/test
     'n_domains' : 5,
     'fast_weight_lr' : 5e-5,
     'meta_lr' : 5e-5, 

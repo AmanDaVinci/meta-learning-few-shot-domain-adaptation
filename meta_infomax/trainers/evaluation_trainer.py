@@ -56,10 +56,10 @@ class EvaluationTrainer(BaseTrainer):
         # we could eventually also include the test split of the train_domain
         train_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
                                       keep_datasets=config['test_domains'],
-                                      random_state=config['random_state'], validation_size=0.8)
+                                      random_state=config['random_state'], validation_size=0.8, const_len=True)
         val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='val',
                                     keep_datasets=config['test_domains'],
-                                    random_state=config['random_state'], validation_size=0.8)
+                                    random_state=config['random_state'], validation_size=0.8, const_len=True)
 
         # we sample 1 batch of k samples, train on those samples for `epoch` steps,
         # and evaluate on the val set

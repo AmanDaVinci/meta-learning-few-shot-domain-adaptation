@@ -209,7 +209,7 @@ class FOMAMLTrainer(BaseTrainer):
         if mode != 'training':
             ### concatenating batches for a larger batch on query
             for batch_ind in range(1, config['num_batches_for_query']):
-                query_batch = torch.cat((query_batch, next(batch_iterator))
+                query_batch = torch.cat((query_batch, next(batch_iterator)))
 
         query_x, query_masks, query_labels, query_domains = query_batch['x'], query_batch['masks'], query_batch['labels'], \
                                                             query_batch['domains']

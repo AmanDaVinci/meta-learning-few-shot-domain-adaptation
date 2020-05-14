@@ -14,7 +14,7 @@ new_config = {
     'val_episodes' : 5,
     'test_episodes' : 5,
     'domain_sampling_strategy' : "uniform",
-    'inner_gd_steps': 3
+    'inner_gd_steps': 3,
 }
 
 config = get_config(base_config, new_config)

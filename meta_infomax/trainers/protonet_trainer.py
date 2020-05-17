@@ -80,8 +80,7 @@ class ProtonetTrainer(BaseTrainer):
         logging.info(f"  Query Set Size = {self.config['n_query']}")
 
         self.validate()
-        for i in range(self.config['n_episodes']):
-
+        while self.seen_examples < self.config['num_training_examples']:
             for domain_dataloader in self.train_dls:
                 self.current_iter += 1
                 episode, domain = self._prepare_episode(domain_dataloader) 
@@ -92,11 +91,8 @@ class ProtonetTrainer(BaseTrainer):
                             f"Accuracy: {results['accuracy']:.3f} "
                             f"Prototypical Loss: {results['loss']:.3f}")
                 self.seen_examples += self.config['n_support'] + self.config['n_query']
-
             self.validate()
-            if self.seen_examples >= self.config['total_seen_examples']:
-                logging.info(f"Seen {self.seen_examples} examples. Stop training.")
-                break
+        logging.info(f"Seen {self.seen_examples} examples. Stop training.")
 
     def validate(self):
         """ Main validation loop """

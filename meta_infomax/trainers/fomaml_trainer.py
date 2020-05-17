@@ -9,7 +9,9 @@ from typing import Dict
 
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
 from meta_infomax.trainers.super_trainer import BaseTrainer
+from meta_infomax.datasets.utils import sample_domains
 
+from random import shuffle
 
 class FOMAMLTrainer(BaseTrainer):
     """Train to classify sentiment across different domains/tasks"""
@@ -20,7 +22,6 @@ class FOMAMLTrainer(BaseTrainer):
         Parameters
         ---
         config:
-            dictionary of configurations with the following keys: (TODO: and more)
             {
                 'exp_name': "multitask_test",
                 'epochs': 10,
@@ -82,7 +83,7 @@ class FOMAMLTrainer(BaseTrainer):
     def train(self):
         """Main training loop."""
         assert self.config['collapse_domains'] == False, 'only implemented for collapse_domains=False'
-        logging.info("***** Running training *****")
+        logging.info("***** Running training - FoMAML *****")
         logging.info("  Num examples = %d", len(self.train_loader))
         logging.info("  Num Episodes = %d", self.config['episodes'])
         logging.info("  K-shot = %d", self.config['k_shot_num'])
@@ -94,15 +95,22 @@ class FOMAMLTrainer(BaseTrainer):
                                              strategy=self.config['domain_sampling_strategy'])
             results = self.outer_loop(episode_domains, mode='training')
 
-            # TODO:  also write to csv file every log_freq steps
+            ## break if iterator is exhauset, or number of examples exceed the threshold
+            if results == 'exhausted' or (self.config['num_examples'] != 'all' and episode * self.config['k_shot_num'] > self.config['num_examples']):
+                print("Breaking training: data is exhausted or threshold exceeded")
+                break
+
             self.writer.add_scalar('Query_Accuracy/Train', results['accuracy'], self.current_episode)
             self.writer.add_scalar('Meta_Loss/Train', results['loss'].item(), self.current_episode)
-            # TODO: only every log_freq steps
             logging.info(f"EPSIODE:{episode} Query_Accuracy: {results['accuracy']:.3f} Meta_Loss: {results['loss'].item():.3f}")
 
-            # TODO add validation
             if self.current_episode % self.config['valid_freq'] == 0:
                 self.fine_tune(mode = 'validate')
+
+    def test(self):
+        logging.info("***** Running testing - FoMAML *****")
+        for episode in range(self.config['test_episodes']):
+            self.fine_tune(mode = 'test')
 
     def fine_tune(self, mode):
         """ Main validation loop """
@@ -146,7 +154,6 @@ class FOMAMLTrainer(BaseTrainer):
             loader = self.train_loader_iterator
         elif mode == 'validate':
             loader = self.val_loader_iterator
-        elif mode == 'test':
             loader = self.test_loader_iterator
 
         domain_grads_head = []
@@ -156,6 +163,15 @@ class FOMAMLTrainer(BaseTrainer):
             batch_iterator = loader[domain]
 
             grads_head, grads_bert, results = self.inner_loop(batch_iterator)
+
+            ## return if the train iterator is exhausted
+            if results == 'exhausted':
+                return 'exhausted'
+            ### call again if the last call ended in reshuffling the test/validation data
+            elif results == 'reshuffled':
+                batch_iterator = loader[domain]
+                grads_head, grads_bert, results = self.inner_loop(batch_iterator)
+
             domain_grads_head.append(grads_head)
             domain_grads_bert.append(grads_bert)
 
@@ -196,19 +212,34 @@ class FOMAMLTrainer(BaseTrainer):
     def inner_loop(self, batch_iterator, mode = 'training'):
         # send tensors to model device
         
-        support_batch = next(batch_iterator)
+        ### checking if the iterator is exhausted
+        if mode == 'training':
+            try:
+                support_batch = next(batch_iterator)
+                query_batch = next(batch_iterator)
+            except StopIteration:
+                print("dataset was exhausted, returning to break training")
+                return None, None, 'exhausted'
+        else:
+            ### concatenating batches for a larger batch on query
+            ### reshuffling if all validation/test examples have been used
+            try:
+                support_batch = next(batch_iterator)
+                query_batch = next(batch_iterator)
+                for batch_ind in range(1, config['num_batches_for_query']):
+                    query_batch = torch.cat((query_batch, next(batch_iterator)))
+            except StopIteration:
+                print("reshuffling train/validation data")
+                self.val_loader_iterator = {domain: shuffle(iter(domain_loader)) for domain, domain_loader in self.val_loader.items()}
+                self.test_loader_iterator = {domain: shuffle(iter(domain_loader)) for domain, domain_loader in self.test_loader.items()}
+                return None, None, 'reshuffled'
+
         support_x, support_masks, support_labels, support_domains = support_batch['x'], support_batch['masks'], support_batch[
             'labels'], support_batch['domains']
         support_x = support_x.to(self.config['device'])
         support_masks = support_masks.to(self.config['device'])
         support_labels = support_labels.to(self.config['device'])
-
         
-        query_batch = next(batch_iterator)
-        if mode != 'training':
-            ### concatenating batches for a larger batch on query
-            for batch_ind in range(1, config['num_batches_for_query']):
-                query_batch = torch.cat((query_batch, next(batch_iterator)))
 
         query_x, query_masks, query_labels, query_domains = query_batch['x'], query_batch['masks'], query_batch['labels'], \
                                                             query_batch['domains']
@@ -216,8 +247,8 @@ class FOMAMLTrainer(BaseTrainer):
         query_masks = query_masks.to(self.config['device'])
         query_labels = query_labels.to(self.config['device'])
 
+
         ### initial update based on the net's weights
-        ## TODO implement for bert weights
         ##self.bert_opt.zero_grad()
         fast_weight_net = deepcopy(self.model)
         self.ffn_opt_inner = optim.Adam(fast_weight_net.parameters(), lr=self.config['fast_weight_lr'])
@@ -256,3 +287,13 @@ class FOMAMLTrainer(BaseTrainer):
 
         results = {'accuracy': output['acc'], 'loss': loss}
         return grad_head, grad_bert, results
+
+
+def load_and_test():
+    #### Script for loading the model and running test
+    from meta_infomax.config.maml_config import config
+
+    fomaml_model = FOMAMLTrainer(config)
+    fomaml_model.load_checkpoint(experiment_name = "maml_train", file_name = "best_model.pt")
+    fomaml_model.test()
+

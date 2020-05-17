@@ -93,7 +93,7 @@ class FOMAMLTrainer(BaseTrainer):
             self.current_episode = episode
 
             ### break if too amny iterators exhausted
-            if len(self.train_loader.keys) < self.config['n_domains']:
+            if len(self.train_loader.keys()) < self.config['n_domains']:
                 logging.info("Breaking training: Not enough training data remaining")
                 break
 
@@ -178,12 +178,14 @@ class FOMAMLTrainer(BaseTrainer):
                 ### remove domain from selectables
                 del loader[domain]
                 ### select random replacement from remaining ones
-                remaining_domians = list(set(loader.keys()) set(domains))
+                remaining_domians = list(set(loader.keys()) - set(domains))
                 if len(remaining_domians) == 0:
                     logging.info("No more populated domains remain, breaking train")
                     return
                 logging.info("domain exhausted, appending new one")
-                domains.append(choice(remaining_domians))
+                new_dom = choice(remaining_domians)
+                domains.append(new_dom)
+                continue
             ### call again if the last call ended in reshuffling the test/validation data
             elif results == 'reshuffled':
                 batch_iterator = loader[domain]

@@ -108,9 +108,7 @@ class FOMAMLTrainer(BaseTrainer):
                 self.fine_tune(mode = 'validate')
 
     def test(self):
-        logging.info("***** Running testing - FoMAML *****")
-        for episode in range(self.config['test_episodes']):
-            self.fine_tune(mode = 'test')
+        self.fine_tune(mode = 'test')
 
     def fine_tune(self, mode):
         """ Main validation loop """
@@ -154,6 +152,7 @@ class FOMAMLTrainer(BaseTrainer):
             loader = self.train_loader_iterator
         elif mode == 'validate':
             loader = self.val_loader_iterator
+        elif mode == 'test':
             loader = self.test_loader_iterator
 
         domain_grads_head = []

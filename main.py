@@ -58,7 +58,7 @@ def main():
 
     if args.test:
         ### loading best model from checkpoint
-        trainer.load_checkpoint(experiment_name = config_module.config['exp_name'], file_name = "best_model.pt")
+        trainer.load_checkpoint(experiment_name = config_module.config['exp_name'], file_name = "best-model.pt")
         trainer.test()
 
 

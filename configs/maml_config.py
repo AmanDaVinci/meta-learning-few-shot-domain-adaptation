@@ -17,7 +17,6 @@ new_config = {
     'domain_sampling_strategy' : "uniform",
     'inner_gd_steps': 3,
     'num_examples' : 'all',
-    'device':'cpu'
 }
 
 config = get_config(base_config, new_config)

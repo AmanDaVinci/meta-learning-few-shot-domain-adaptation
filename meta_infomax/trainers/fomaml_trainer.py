@@ -133,7 +133,9 @@ class FOMAMLTrainer(BaseTrainer):
         elif mode == 'test':
             logging.info("***** Running test *****")
             domains = self.config['test_domains']
-            episodes = range(self.config['test_episodes'])
+            ### calculating the max number of episodes we can fit
+            min_len = min([len(domain_iterator) for domain_key, domain_iterator in self.train_loader_iterator.items()])
+            episodes = int(min_len / (config['k_shot_num']*2 + config['k_shot_num']*2*config['num_batches_for_query']))
 
         for episode in episodes:
             results = self.outer_loop(domains, mode=mode)
@@ -144,7 +146,7 @@ class FOMAMLTrainer(BaseTrainer):
         mean_loss = results['loss'] / (episode + 1)
         if mean_accuracy > self.best_accuracy:
             self.best_accuracy = mean_accuracy
-            self.save_checkpoint(self.BEST_MODEL_FNAME)
+            self.save_checkpoint("unfrozen_bert:"+ str(self.config['unfreeze_layers']) + "_num_examples:" + str(self.config['num_examples']) + "_" + self.BEST_MODEL_FNAME)
         self.writer.add_scalar('Query_Accuracy/' + mode, mean_accuracy, self.current_episode)
         self.writer.add_scalar('Meta_Loss/' + mode, mean_loss, self.current_episode)
 
@@ -177,6 +179,7 @@ class FOMAMLTrainer(BaseTrainer):
             if results == 'exhausted':
                 ### remove domain from selectables
                 del loader[domain]
+                del self.train_loader[domain]
                 ### select random replacement from remaining ones
                 remaining_domians = list(set(loader.keys()) - set(domains))
                 if len(remaining_domians) == 0:
@@ -237,7 +240,7 @@ class FOMAMLTrainer(BaseTrainer):
                 support_batch = next(batch_iterator)
                 query_batch = next(batch_iterator)
             except StopIteration:
-                print("dataset was exhausted, returning to break training")
+                print("dataset was exhausted, returning")
                 return None, None, 'exhausted'
         else:
             ### concatenating batches for a larger batch on query

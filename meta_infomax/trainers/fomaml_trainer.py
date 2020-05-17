@@ -11,7 +11,7 @@ from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
 from meta_infomax.trainers.super_trainer import BaseTrainer
 from meta_infomax.datasets.utils import sample_domains
 
-from random import shuffle
+from random import shuffle, choice
 
 class FOMAMLTrainer(BaseTrainer):
     """Train to classify sentiment across different domains/tasks"""
@@ -100,6 +100,10 @@ class FOMAMLTrainer(BaseTrainer):
             episode_domains = sample_domains(self.train_loader, n_samples=self.config['n_domains'],
                                              strategy=self.config['domain_sampling_strategy'])
             results = self.outer_loop(episode_domains, mode='training')
+            
+            ### none returned if there is no more data
+            if not results:
+                break
 
             self.writer.add_scalar('Query_Accuracy/Train', results['accuracy'], self.current_episode)
             self.writer.add_scalar('Meta_Loss/Train', results['loss'].item(), self.current_episode)
@@ -174,7 +178,10 @@ class FOMAMLTrainer(BaseTrainer):
                 ### remove domain from selectables
                 del loader[domain]
                 ### select random replacement from remaining ones
-                return 'exhausted'
+                remaining_domians = list(set(loader.keys()) set(domains))
+                if len(remaining_domians) == 0:
+                    return
+                domains.append(choice(remaining_domians))
             ### call again if the last call ended in reshuffling the test/validation data
             elif results == 'reshuffled':
                 batch_iterator = loader[domain]

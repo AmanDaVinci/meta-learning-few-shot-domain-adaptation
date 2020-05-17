@@ -22,7 +22,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default="configs.evaluation_config", help='experiment configuration dict')
     parser.add_argument('--trainer', default=None, type=str, help='Type of trainer model')
-    parser.add_argument('--train', default=True, action='store_true', help='whether to train')
+    parser.add_argument('--train', default=False, action='store_true', help='whether to train')
     parser.add_argument('--test', default=False, action='store_true', help='whether to test')
     # TODO: implement no_cuda
     parser.add_argument("--no_cuda", action="store_true", help='Whether not to use CUDA when available')
@@ -58,7 +58,7 @@ def main():
 
     if args.test:
         ### loading best model from checkpoint
-        trainer.load_checkpoint(experiment_name = config_module.config['experiment_name'], file_name = "best_model.pt")
+        trainer.load_checkpoint(experiment_name = config_module.config['exp_name'], file_name = "best_model.pt")
         trainer.test()
 
 

@@ -11,6 +11,7 @@ new_config = {
     'collapse_domains' : False,
     'exp_name': 'maml_train',
     'episodes': 500,
+    'test_episodes':40,
     'val_episodes' : 5,
     'test_episodes' : 5,
     'domain_sampling_strategy' : "uniform",

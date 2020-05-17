@@ -44,7 +44,7 @@ class EvaluationTrainer(BaseTrainer):
         """
         config['log_dir'] = RESULTS / config['exp_name'] / 'evaluation' / LOG_DIR
         super().__init__(config)
-        self.load_checkpoint(config['exp_name'])
+        self.load_checkpoint(config['exp_name'])#
         eval_dir = f"kshot_{config['k_shot']}_lr_{config['lr']}_epochs_{config['epochs']}"
         self.eval_dir = self.exp_dir / 'evaluation' / eval_dir # we save results here
         self.eval_dir.mkdir(parents=True, exist_ok=True)

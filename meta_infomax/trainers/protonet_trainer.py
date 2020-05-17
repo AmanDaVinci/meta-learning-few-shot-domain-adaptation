@@ -78,7 +78,7 @@ class ProtonetTrainer(BaseTrainer):
     def train(self):
         """Main training loop."""
         logging.info("***** Start Training *****")
-        logging.info(f"  Number of Episodes = {self.config['n_episodes']}")
+        logging.info(f"  Number of Training Examples = {self.config['num_training_examples']}")
         logging.info(f"  Support Set Size = {self.config['n_support']}")
         logging.info(f"  Query Set Size = {self.config['n_query']}")
 
@@ -91,7 +91,7 @@ class ProtonetTrainer(BaseTrainer):
                 results = self._episode_iteration(episode, training=True)
                 self.writer.add_scalar(f'{domain}/Accuracy', results['accuracy'], self.current_iter)
                 self.writer.add_scalar(f'{domain}/Loss', results['loss'], self.current_iter)
-                logging.info(f"EPISODE:{i} \t Domain: {domain} "
+                logging.info(f"Iteration: {self.current_iter} \t Domain: {domain} "
                             f"Accuracy: {results['accuracy']:.3f} "
                             f"Prototypical Loss: {results['loss']:.3f}")
             self.validate()

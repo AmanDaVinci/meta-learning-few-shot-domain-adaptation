@@ -8,7 +8,6 @@ from transformers import get_linear_schedule_with_warmup, AdamW
 from typing import Dict
 
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
-from meta_infomax.datasets.utils import sample_domains
 from meta_infomax.trainers.super_trainer import BaseTrainer
 
 

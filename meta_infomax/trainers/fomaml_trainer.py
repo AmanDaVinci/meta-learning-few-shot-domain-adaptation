@@ -8,7 +8,6 @@ from transformers import get_linear_schedule_with_warmup, AdamW
 from typing import Dict
 
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
-from meta_infomax.datasets.utils import sample_domains
 from meta_infomax.trainers.super_trainer import BaseTrainer
 
 
@@ -55,12 +54,18 @@ class FOMAMLTrainer(BaseTrainer):
                                      random_state=config['random_state'], validation_size=0)
 
         # loaders are now dicts mapping from domains to individual loaders
-        self.train_loader = train_data.domain_dataloaders(batch_size=config['k_shot_num'],
+        ### k-shot is defined per class (pos/negative), so here we multiply by 2, as we just sample the whole data
+        self.train_loader = train_data.domain_dataloaders(batch_size=config['k_shot_num']*2,
                                                           shuffle=True)
-        self.val_loader = val_data.domain_dataloaders(batch_size=config['k_shot_num'],
+        self.val_loader = val_data.domain_dataloaders(batch_size=config['k_shot_num']*2,
                                                       shuffle=False)
-        self.test_loader = test_data.domain_dataloaders(batch_size=config['k_shot_num'],
+        self.test_loader = test_data.domain_dataloaders(batch_size=config['k_shot_num']*2,
                                                         shuffle=False)
+
+        ## define iterators
+        self.train_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.train_loader.items()}
+        self.val_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.val_loader.items()}
+        self.test_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.test_loader.items()}
 
         self.current_episode = 0
 
@@ -138,15 +143,15 @@ class FOMAMLTrainer(BaseTrainer):
         meta_acc = 0
 
         if mode == 'training':
-            loader = self.train_loader
+            loader = self.train_loader_iterator
         elif mode == 'validate':
-            loader = self.val_loader
+            loader = self.val_loader_iterator
         elif mode == 'test':
-            loader = self.test_loader
+            loader = self.test_loader_iterator
 
         domain_grads_head = []
         domain_grads_bert = []
-        loader = {domain: iter(domain_loader) for domain, domain_loader in loader.items()}
+        
         for domain in domains:
             batch_iterator = loader[domain]
 
@@ -198,7 +203,13 @@ class FOMAMLTrainer(BaseTrainer):
         support_masks = support_masks.to(self.config['device'])
         support_labels = support_labels.to(self.config['device'])
 
+        
         query_batch = next(batch_iterator)
+        if mode != 'training':
+            ### concatenating batches for a larger batch on query
+            for batch_ind in range(1, config['num_batches_for_query']):
+                query_batch = torch.cat((query_batch, next(batch_iterator)))
+
         query_x, query_masks, query_labels, query_domains = query_batch['x'], query_batch['masks'], query_batch['labels'], \
                                                             query_batch['domains']
         query_x = query_x.to(self.config['device'])

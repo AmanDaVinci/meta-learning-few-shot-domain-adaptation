@@ -91,14 +91,15 @@ class FOMAMLTrainer(BaseTrainer):
 
         for episode in range(self.current_episode, self.config['episodes']):
             self.current_episode = episode
+
+            ### break if too amny iterators exhausted
+            if len(self.train_loader.keys) < self.config['n_domains']:
+                logging.info("Breaking training: Not enough training data remaining")
+                break
+
             episode_domains = sample_domains(self.train_loader, n_samples=self.config['n_domains'],
                                              strategy=self.config['domain_sampling_strategy'])
             results = self.outer_loop(episode_domains, mode='training')
-
-            ## break if iterator is exhauset, or number of examples exceed the threshold
-            if results == 'exhausted' or (self.config['num_examples'] != 'all' and episode * self.config['k_shot_num'] > self.config['num_examples']):
-                print("Breaking training: data is exhausted or threshold exceeded")
-                break
 
             self.writer.add_scalar('Query_Accuracy/Train', results['accuracy'], self.current_episode)
             self.writer.add_scalar('Meta_Loss/Train', results['loss'].item(), self.current_episode)
@@ -106,6 +107,11 @@ class FOMAMLTrainer(BaseTrainer):
 
             if self.current_episode % self.config['valid_freq'] == 0:
                 self.fine_tune(mode = 'validate')
+            
+            ## break if number of examples exceed the threshold
+            if (self.config['num_examples'] != 'all' and episode * self.config['k_shot_num'] > self.config['num_examples']):
+                logging.info("Breaking training: num examples threshold exceeded")
+                break
 
     def test(self):
         self.fine_tune(mode = 'test')

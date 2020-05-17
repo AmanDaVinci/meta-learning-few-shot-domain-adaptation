@@ -288,12 +288,3 @@ class FOMAMLTrainer(BaseTrainer):
         results = {'accuracy': output['acc'], 'loss': loss}
         return grad_head, grad_bert, results
 
-
-def load_and_test():
-    #### Script for loading the model and running test
-    from meta_infomax.config.maml_config import config
-
-    fomaml_model = FOMAMLTrainer(config)
-    fomaml_model.load_checkpoint(experiment_name = "maml_train", file_name = "best_model.pt")
-    fomaml_model.test()
-

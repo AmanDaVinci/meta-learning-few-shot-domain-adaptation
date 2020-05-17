@@ -180,7 +180,9 @@ class FOMAMLTrainer(BaseTrainer):
                 ### select random replacement from remaining ones
                 remaining_domians = list(set(loader.keys()) set(domains))
                 if len(remaining_domians) == 0:
+                    logging.info("No more populated domains remain, breaking train")
                     return
+                logging.info("domain exhausted, appending new one")
                 domains.append(choice(remaining_domians))
             ### call again if the last call ended in reshuffling the test/validation data
             elif results == 'reshuffled':

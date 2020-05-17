@@ -171,6 +171,9 @@ class FOMAMLTrainer(BaseTrainer):
 
             ## return if the train iterator is exhausted
             if results == 'exhausted':
+                ### remove domain from selectables
+                del loader[domain]
+                ### select random replacement from remaining ones
                 return 'exhausted'
             ### call again if the last call ended in reshuffling the test/validation data
             elif results == 'reshuffled':

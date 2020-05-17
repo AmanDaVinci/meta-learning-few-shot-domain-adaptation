@@ -67,9 +67,12 @@ class ProtonetTrainer(BaseTrainer):
         self.bert_opt = AdamW(self.model.bert_encoder.parameters(),
                               lr=config['lr'], correct_bias=False, 
                               weight_decay=config['weight_decay'])
+        
+        self.examples_per_episode = 2 * (config['n_support']+config['n_query'])
+        training_steps = config['num_training_examples'] // self.examples_per_episode
         self.bert_scheduler = get_linear_schedule_with_warmup(self.bert_opt,
                                                               num_warmup_steps=config['warmup_steps'],
-                                                              num_training_steps=config['n_episodes'])
+                                                              num_training_steps=training_steps)
         self.seen_examples = 0
 
     def train(self):
@@ -83,6 +86,7 @@ class ProtonetTrainer(BaseTrainer):
         while self.seen_examples < self.config['num_training_examples']:
             for domain_dataloader in self.train_dls:
                 self.current_iter += 1
+                self.seen_examples += self.examples_per_episode
                 episode, domain = self._prepare_episode(domain_dataloader) 
                 results = self._episode_iteration(episode, training=True)
                 self.writer.add_scalar(f'{domain}/Accuracy', results['accuracy'], self.current_iter)
@@ -90,7 +94,6 @@ class ProtonetTrainer(BaseTrainer):
                 logging.info(f"EPISODE:{i} \t Domain: {domain} "
                             f"Accuracy: {results['accuracy']:.3f} "
                             f"Prototypical Loss: {results['loss']:.3f}")
-                self.seen_examples += self.config['n_support'] + self.config['n_query']
             self.validate()
         logging.info(f"Seen {self.seen_examples} examples. Stop training.")
 
@@ -102,8 +105,8 @@ class ProtonetTrainer(BaseTrainer):
         for domain_dataloader in self.val_dls:
             domain_losses = []
             domain_accuracies = []
-
-            for i in range(self.config['val_episodes']):
+            num_episodes = len(domain_dataloader[0])
+            for i in range(num_episodes):
                 episode, domain = self._prepare_episode(domain_dataloader) 
                 results = self._episode_iteration(episode, training=False)
                 domain_losses.append(results['loss'])
@@ -111,8 +114,8 @@ class ProtonetTrainer(BaseTrainer):
             
             domain_mean_accuracy = np.mean(domain_accuracies)
             domain_mean_loss = np.mean(domain_losses)
-            self.writer.add_scalar(f'Validation-{domain}/Accuracy', domain_mean_accuracy, self.current_iter)
-            self.writer.add_scalar(f'Validation-{domain}/Loss', domain_mean_loss, self.current_iter)
+            self.writer.add_scalar(f'Validation-{domain}/Accuracy-vs-Iterations', domain_mean_accuracy, self.current_iter)
+            self.writer.add_scalar(f'Validation-{domain}/Loss-vs-Iterations', domain_mean_loss, self.current_iter)
             self.writer.add_scalar(f'Validation-{domain}/Accuracy-vs-Seen-Examples', domain_mean_accuracy, self.seen_examples)
             self.writer.add_scalar(f'Validation-{domain}/Loss-vs-Seen-Examples', domain_mean_loss, self.seen_examples)
             report = (f"[Validation] \t Domain: {domain} "
@@ -135,7 +138,8 @@ class ProtonetTrainer(BaseTrainer):
         for domain_dataloader in self.test_dls:
             domain_losses = []
             domain_accuracies = []
-            for i in range(self.config['val_episodes']):
+            num_episodes = len(domain_dataloader[0])
+            for i in range(num_episodes):
                 episode, domain = self._prepare_episode(domain_dataloader) 
                 results = self._episode_iteration(episode, training=False)
                 domain_losses.append(results['loss'])

@@ -135,7 +135,7 @@ class FOMAMLTrainer(BaseTrainer):
             domains = self.config['test_domains']
             ### calculating the max number of episodes we can fit
             min_len = min([len(domain_iterator) for domain_key, domain_iterator in self.train_loader_iterator.items()])
-            episodes = int(min_len / (config['k_shot_num']*2 + config['k_shot_num']*2*config['num_batches_for_query']))
+            episodes = int(min_len / (self.config['k_shot_num']*2 + self.config['k_shot_num']*2*self.config['num_batches_for_query']))
 
         for episode in episodes:
             results = self.outer_loop(domains, mode=mode)

@@ -140,7 +140,7 @@ class FOMAMLTrainer(BaseTrainer):
         for episode in episodes:
             results = self.outer_loop(domains, mode=mode)
             acc_total += results['accuracy']
-            loss_total += results['loss']
+            loss_total += results['loss'].item()
 
         mean_accuracy = acc_total / (episode + 1)
         mean_loss = results['loss'] / (episode + 1)

@@ -42,6 +42,7 @@ class FOMAMLTrainer(BaseTrainer):
         """
         super().__init__(config)
 
+
         # for now, we say that the training data, is the train split of every train domain
         # we could eventually also include the test split of the train_domain
         train_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
@@ -67,6 +68,8 @@ class FOMAMLTrainer(BaseTrainer):
         self.train_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.train_loader.items()}
         self.val_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.val_loader.items()}
         self.test_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.test_loader.items()}
+
+        self.train_examples_per_episode = config['k_shot_num']*4 *  config['n_domains']
 
         self.current_episode = 0
 
@@ -113,7 +116,7 @@ class FOMAMLTrainer(BaseTrainer):
                 self.fine_tune(mode = 'validate')
             
             ## break if number of examples exceed the threshold
-            if (self.config['num_examples'] != 'all' and episode * self.config['k_shot_num'] > self.config['num_examples']):
+            if (self.config['num_examples'] != 'all' and episode * self.train_examples_per_episode  > self.config['num_examples']):
                 logging.info("Breaking training: num examples threshold exceeded")
                 break
 
@@ -144,7 +147,7 @@ class FOMAMLTrainer(BaseTrainer):
 
         mean_accuracy = acc_total / (episode + 1)
         mean_loss = results['loss'] / (episode + 1)
-        if mean_accuracy > self.best_accuracy:
+        if mean_accuracy > self.best_accuracy and mode == 'validate':
             self.best_accuracy = mean_accuracy
             self.save_checkpoint("unfrozen_bert:"+ str(self.config['unfreeze_layers']) + "_num_examples:" + str(self.config['num_examples']) + "_" + self.BEST_MODEL_FNAME)
         self.writer.add_scalar('Query_Accuracy/' + mode, mean_accuracy, self.current_episode)
@@ -173,7 +176,7 @@ class FOMAMLTrainer(BaseTrainer):
         for domain in domains:
             batch_iterator = loader[domain]
 
-            grads_head, grads_bert, results = self.inner_loop(batch_iterator)
+            grads_head, grads_bert, results = self.inner_loop(batch_iterator, mode = mode)
 
             ## return if the train iterator is exhausted
             if results == 'exhausted':
@@ -185,14 +188,18 @@ class FOMAMLTrainer(BaseTrainer):
                 if len(remaining_domians) == 0:
                     logging.info("No more populated domains remain, breaking train")
                     return
-                logging.info("domain exhausted, appending new one")
+                logging.info("domain " + domain + " exhausted, appending new one")
                 new_dom = choice(remaining_domians)
                 domains.append(new_dom)
                 continue
             ### call again if the last call ended in reshuffling the test/validation data
             elif results == 'reshuffled':
+                if mode == 'validate':
+                    loader = self.val_loader_iterator
+                elif mode == 'test':
+                    loader = self.test_loader_iterator
                 batch_iterator = loader[domain]
-                grads_head, grads_bert, results = self.inner_loop(batch_iterator)
+                grads_head, grads_bert, results = self.inner_loop(batch_iterator, mode = mode)
 
             domain_grads_head.append(grads_head)
             domain_grads_bert.append(grads_bert)
@@ -248,12 +255,11 @@ class FOMAMLTrainer(BaseTrainer):
             try:
                 support_batch = next(batch_iterator)
                 query_batch = next(batch_iterator)
-                for batch_ind in range(1, config['num_batches_for_query']):
-                    query_batch = torch.cat((query_batch, next(batch_iterator)))
+
             except StopIteration:
-                print("reshuffling train/validation data")
-                self.val_loader_iterator = {domain: shuffle(iter(domain_loader)) for domain, domain_loader in self.val_loader.items()}
-                self.test_loader_iterator = {domain: shuffle(iter(domain_loader)) for domain, domain_loader in self.test_loader.items()}
+                print("reshuffling test/validation data")
+                self.val_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.val_loader.items()}
+                self.test_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.test_loader.items()}
                 return None, None, 'reshuffled'
 
         support_x, support_masks, support_labels, support_domains = support_batch['x'], support_batch['masks'], support_batch[
@@ -305,7 +311,7 @@ class FOMAMLTrainer(BaseTrainer):
             grad_bert = fast_weight_net.get_bert_grads()
 
         elif mode == "validate" or mode == "test":
-            grad_head, grad_bert = None
+            grad_head, grad_bert = None, None
 
         results = {'accuracy': output['acc'], 'loss': loss}
         return grad_head, grad_bert, results

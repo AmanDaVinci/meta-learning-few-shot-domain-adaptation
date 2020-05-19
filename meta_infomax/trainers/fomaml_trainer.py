@@ -46,14 +46,14 @@ class FOMAMLTrainer(BaseTrainer):
         # for now, we say that the training data, is the train split of every train domain
         # we could eventually also include the test split of the train_domain
         train_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
-                                      keep_datasets=config['train_domains'],
-                                      random_state=config['random_state'], validation_size=0)
+                                      keep_datasets=config['train_domains'], random_state=config['random_state'],
+                                      validation_size=0, const_len=True)
         val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
-                                    keep_datasets=config['val_domains'],
-                                    random_state=config['random_state'], validation_size=0)
+                                    keep_datasets=config['val_domains'], random_state=config['random_state'],
+                                    validation_size=0, const_len=True)
         test_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
-                                     keep_datasets=config['test_domains'],
-                                     random_state=config['random_state'], validation_size=0)
+                                     keep_datasets=config['test_domains'], random_state=config['random_state'],
+                                     validation_size=0, const_len=True)
 
         # loaders are now dicts mapping from domains to individual loaders
         ### k-shot is defined per class (pos/negative), so here we multiply by 2, as we just sample the whole data
@@ -134,6 +134,7 @@ class FOMAMLTrainer(BaseTrainer):
 
         acc_across_domains = 0
         loss_across_domains = 0
+        total_episodes = 0
         for fine_tune_domain in domains:
             acc_total = 0
             loss_total = 0
@@ -150,7 +151,7 @@ class FOMAMLTrainer(BaseTrainer):
                 loss_total += results['loss'].item()
 
             mean_accuracy = acc_total / (episode + 1)
-            mean_loss = results['loss'] / (episode + 1)
+            mean_loss = loss_total / (episode + 1)
 
             report = (f"[Validation]\t"
                     f"Query_Accuracy: {mean_accuracy:.3f} "
@@ -158,12 +159,13 @@ class FOMAMLTrainer(BaseTrainer):
             logging.info("Domain " + fine_tune_domain  + " performance")
             logging.info(report)
 
-            acc_across_domains += mean_accuracy
-            loss_across_domains += mean_loss
+            acc_across_domains += acc_total
+            loss_across_domains += loss_total
+            total_episodes += episode+1
 
         ### averaging over fine tune domains
-        acc_across_domains /= len(domains)
-        loss_across_domains /= len(domains)
+        acc_across_domains /= total_episodes
+        loss_across_domains /= total_episodes
         if acc_across_domains > self.best_accuracy and mode == 'validate':
             self.best_accuracy = acc_across_domains
             self.save_checkpoint("unfrozen_bert:"+ str(self.config['unfreeze_layers']) + "_num_examples:" + str(self.config['num_examples']) + "_" + self.BEST_MODEL_FNAME)
@@ -256,14 +258,16 @@ class FOMAMLTrainer(BaseTrainer):
             ### checking if the iterator is exhausted
             try:
                 support_batch = next(batch_iterator)
-                query_batch = next(batch_iterator)
+                query_batch = [next(batch_iterator)]
+                query_chunks = 1
             except StopIteration:
                 print("dataset was exhausted, returning")
                 return None, None, 'exhausted'
         else:
             ### for test/valid, we draw a batch in each episode and test on all the rest
             support_batch = batch_iterator[episode]
-            query_batch = batch_iterator[episode]
+            query_chunks = 20
+            query_batch = self.concatenate_remaining_batches(batch_iterator,episode, query_chunks)
 
 
         support_x, support_masks, support_labels, support_domains = support_batch['x'], support_batch['masks'], support_batch[
@@ -272,14 +276,6 @@ class FOMAMLTrainer(BaseTrainer):
         support_masks = support_masks.to(self.config['device'])
         support_labels = support_labels.to(self.config['device'])
         
-
-        query_x, query_masks, query_labels, query_domains = query_batch['x'], query_batch['masks'], query_batch['labels'], \
-                                                            query_batch['domains']
-        query_x = query_x.to(self.config['device'])
-        query_masks = query_masks.to(self.config['device'])
-        query_labels = query_labels.to(self.config['device'])
-
-
         ### initial update based on the net's weights
         ##self.bert_opt.zero_grad()
         fast_weight_net = deepcopy(self.model)
@@ -300,10 +296,20 @@ class FOMAMLTrainer(BaseTrainer):
             self.ffn_opt_inner.zero_grad()
 
         ### FOMAML - we'll use last step's gradients for update
-        output = fast_weight_net(x=query_x, masks=query_masks, labels=query_labels,
-                                 domains=query_domains)  # domains is ignored for now
-        logits = output['logits']
-        loss = output['loss']
+        ###looping through the query chunks
+        loss = 0
+        query_acc = 0
+        for chunkInd in range(query_chunks):
+            query_x, query_masks, query_labels, query_domains = query_batch[chunkInd]['x'], query_batch[chunkInd]['masks'], query_batch[chunkInd]['labels'], \
+                                                                query_batch[chunkInd]['domains']
+            query_x = query_x.to(self.config['device'])
+            query_masks = query_masks.to(self.config['device'])
+            query_labels = query_labels.to(self.config['device'])
+            output = fast_weight_net(x=query_x, masks=query_masks, labels=query_labels,
+                                    domains=query_domains)  # domains is ignored for now
+            logits = output['logits']
+            loss += output['loss']
+            query_acc += output['acc']
 
         if mode == "training":
 
@@ -317,6 +323,19 @@ class FOMAMLTrainer(BaseTrainer):
         elif mode == "validate" or mode == "test":
             grad_head, grad_bert = None, None
 
-        results = {'accuracy': output['acc'], 'loss': loss}
+        results = {'accuracy': query_acc, 'loss': loss}
         return grad_head, grad_bert, results
 
+    def concatenate_remaining_batches_and_chunk(self, iterator, index, num_chunks):
+
+        x = torch.chunk(torch.cat([batch["x"] for batch in iterator[0:index] + iterator[index+1:]]), num_chunks)
+        masks = torch.chunk(torch.cat([batch["masks"] for batch in iterator[0:index] + iterator[index+1:]]), num_chunks)
+        labels = torch.chunk(torch.cat([batch["labels"] for batch in iterator[0:index]+ iterator[index+1:]]), num_chunks)
+        ### domains not used in the script
+        domains = None
+
+        batches = []
+        for ind in range(num_chunks):
+            batches.append({"x":x[ind], "masks":masks[ind], "labels":labels[ind], "domain": None})
+
+        return batches

@@ -267,7 +267,7 @@ class FOMAMLTrainer(BaseTrainer):
             ### for test/valid, we draw a batch in each episode and test on all the rest
             support_batch = batch_iterator[episode]
             query_chunks = 20
-            query_batch = self.concatenate_remaining_batches(batch_iterator,episode, query_chunks)
+            query_batch = self.concatenate_remaining_batches_and_chunk(batch_iterator,episode, query_chunks)
 
 
         support_x, support_masks, support_labels, support_domains = support_batch['x'], support_batch['masks'], support_batch[
@@ -336,6 +336,6 @@ class FOMAMLTrainer(BaseTrainer):
 
         batches = []
         for ind in range(num_chunks):
-            batches.append({"x":x[ind], "masks":masks[ind], "labels":labels[ind], "domain": None})
+            batches.append({"x":x[ind], "masks":masks[ind], "labels":labels[ind], "domains": None})
 
         return batches

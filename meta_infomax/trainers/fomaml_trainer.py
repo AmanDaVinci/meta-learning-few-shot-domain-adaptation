@@ -66,8 +66,8 @@ class FOMAMLTrainer(BaseTrainer):
 
         ## define iterators
         self.train_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.train_loader.items()}
-        self.val_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.val_loader.items()}
-        self.test_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.test_loader.items()}
+        self.val_loader_iterator = {domain: list(iter(domain_loader)) for domain, domain_loader in self.val_loader.items()}
+        self.test_loader_iterator = {domain: list(iter(domain_loader)) for domain, domain_loader in self.test_loader.items()}
 
         self.train_examples_per_episode = config['k_shot_num']*4 *  config['n_domains']
 
@@ -125,40 +125,58 @@ class FOMAMLTrainer(BaseTrainer):
 
     def fine_tune(self, mode):
         """ Main validation loop """
-
-        acc_total = 0
-        loss_total = 0
-
         if mode == 'validate':
             logging.info("***** Running evaluation *****")
             domains = self.config['val_domains']
-            episodes = range(self.config['val_episodes'])
         elif mode == 'test':
             logging.info("***** Running test *****")
             domains = self.config['test_domains']
-            ### calculating the max number of episodes we can fit
-            min_len = min([len(domain_iterator) for domain_key, domain_iterator in self.train_loader_iterator.items()])
-            episodes = range(int(min_len / (self.config['k_shot_num']*2 + self.config['k_shot_num']*2*self.config['num_batches_for_query'])))
 
-        for episode in episodes:
-            results = self.outer_loop(domains, mode=mode)
-            acc_total += results['accuracy']
-            loss_total += results['loss'].item()
+        acc_across_domains = 0
+        loss_across_domains = 0
+        for fine_tune_domain in domains:
+            acc_total = 0
+            loss_total = 0
+            if mode == 'validate':
+                episodes = range(len(self.val_loader_iterator[fine_tune_domain]))
+            elif mode == 'test':
+                episodes = range(len(self.test_loader_iterator[fine_tune_domain]))
 
-        mean_accuracy = acc_total / (episode + 1)
-        mean_loss = results['loss'] / (episode + 1)
-        if mean_accuracy > self.best_accuracy and mode == 'validate':
-            self.best_accuracy = mean_accuracy
+            logging.info("Fine tuning on domain: " + str(fine_tune_domain) + " num episodes: " + str(episodes))
+
+            for episode in episodes:
+                results = self.outer_loop([fine_tune_domain], mode=mode, episode=episode)
+                acc_total += results['accuracy']
+                loss_total += results['loss'].item()
+
+            mean_accuracy = acc_total / (episode + 1)
+            mean_loss = results['loss'] / (episode + 1)
+
+            report = (f"[Validation]\t"
+                    f"Query_Accuracy: {mean_accuracy:.3f} "
+                    f"Total Meta_Loss: {mean_loss:.3f}")
+            logging.info("Domain " + fine_tune_domain  + " performance")
+            logging.info(report)
+
+            acc_across_domains += mean_accuracy
+            loss_across_domains += mean_loss
+
+        ### averaging over fine tune domains
+        acc_across_domains /= len(domains)
+        loss_across_domains /= len(domains)
+        if acc_across_domains > self.best_accuracy and mode == 'validate':
+            self.best_accuracy = acc_across_domains
             self.save_checkpoint("unfrozen_bert:"+ str(self.config['unfreeze_layers']) + "_num_examples:" + str(self.config['num_examples']) + "_" + self.BEST_MODEL_FNAME)
-        self.writer.add_scalar('Query_Accuracy/' + mode, mean_accuracy, self.current_episode)
-        self.writer.add_scalar('Meta_Loss/' + mode, mean_loss, self.current_episode)
+        self.writer.add_scalar('Avg_FineTune_Accuracy/' + mode, acc_across_domains, self.current_episode)
+        self.writer.add_scalar('Avg_FineTune_Loss/' + mode, loss_across_domains, self.current_episode)
 
         report = (f"[Validation]\t"
-                  f"Query_Accuracy: {mean_accuracy:.3f} "
-                  f"Total Meta_Loss: {mean_loss:.3f}")
+                f"Query_Accuracy: {acc_across_domains:.3f} "
+                f"Total Meta_Loss: {loss_across_domains:.3f}")
+        logging.info("Average fine tune performance across domains")
         logging.info(report)
 
-    def outer_loop(self, domains, mode: str):
+    def outer_loop(self, domains, mode: str, episode = None):
         """ Iterate over one batch """
         meta_loss = 0
         meta_acc = 0
@@ -176,7 +194,7 @@ class FOMAMLTrainer(BaseTrainer):
         for domain in domains:
             batch_iterator = loader[domain]
 
-            grads_head, grads_bert, results = self.inner_loop(batch_iterator, mode = mode)
+            grads_head, grads_bert, results = self.inner_loop(batch_iterator, mode = mode, episode=episode)
 
             ## return if the train iterator is exhausted
             if results == 'exhausted':
@@ -192,14 +210,7 @@ class FOMAMLTrainer(BaseTrainer):
                 new_dom = choice(remaining_domians)
                 domains.append(new_dom)
                 continue
-            ### call again if the last call ended in reshuffling the test/validation data
-            elif results == 'reshuffled':
-                if mode == 'validate':
-                    loader = self.val_loader_iterator
-                elif mode == 'test':
-                    loader = self.test_loader_iterator
-                batch_iterator = loader[domain]
-                grads_head, grads_bert, results = self.inner_loop(batch_iterator, mode = mode)
+
 
             domain_grads_head.append(grads_head)
             domain_grads_bert.append(grads_bert)
@@ -238,11 +249,11 @@ class FOMAMLTrainer(BaseTrainer):
         meta_results = {"loss": meta_loss, "accuracy": meta_acc / len(domains)}
         return meta_results
 
-    def inner_loop(self, batch_iterator, mode = 'training'):
-        # send tensors to model device
+    def inner_loop(self, batch_iterator, mode = 'training', episode = None):
+        # episode number of only used in val/test, to select batches one by one
         
-        ### checking if the iterator is exhausted
         if mode == 'training':
+            ### checking if the iterator is exhausted
             try:
                 support_batch = next(batch_iterator)
                 query_batch = next(batch_iterator)
@@ -250,17 +261,10 @@ class FOMAMLTrainer(BaseTrainer):
                 print("dataset was exhausted, returning")
                 return None, None, 'exhausted'
         else:
-            ### concatenating batches for a larger batch on query
-            ### reshuffling if all validation/test examples have been used
-            try:
-                support_batch = next(batch_iterator)
-                query_batch = next(batch_iterator)
+            ### for test/valid, we draw a batch in each episode and test on all the rest
+            support_batch = batch_iterator[episode]
+            query_batch = batch_iterator[episode]
 
-            except StopIteration:
-                print("reshuffling test/validation data")
-                self.val_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.val_loader.items()}
-                self.test_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.test_loader.items()}
-                return None, None, 'reshuffled'
 
         support_x, support_masks, support_labels, support_domains = support_batch['x'], support_batch['masks'], support_batch[
             'labels'], support_batch['domains']

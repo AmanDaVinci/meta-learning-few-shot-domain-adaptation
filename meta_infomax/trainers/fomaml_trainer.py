@@ -69,6 +69,8 @@ class FOMAMLTrainer(BaseTrainer):
         self.val_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.val_loader.items()}
         self.test_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.test_loader.items()}
 
+        self.train_examples_per_episode = config['k_shot_num']*4 *  config['n_domains']
+
         self.current_episode = 0
 
         self.ffn_opt = optim.Adam(self.model.head.parameters(), lr=self.config['meta_lr'])
@@ -114,7 +116,7 @@ class FOMAMLTrainer(BaseTrainer):
                 self.fine_tune(mode = 'validate')
             
             ## break if number of examples exceed the threshold
-            if (self.config['num_examples'] != 'all' and episode * self.config['k_shot_num'] > self.config['num_examples']):
+            if (self.config['num_examples'] != 'all' and episode * self.train_examples_per_episode  > self.config['num_examples']):
                 logging.info("Breaking training: num examples threshold exceeded")
                 break
 

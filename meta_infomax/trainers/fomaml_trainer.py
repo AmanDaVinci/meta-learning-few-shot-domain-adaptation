@@ -109,8 +109,8 @@ class FOMAMLTrainer(BaseTrainer):
                 break
 
             self.writer.add_scalar('Query_Accuracy/Train', results['accuracy'], self.current_episode)
-            self.writer.add_scalar('Meta_Loss/Train', results['loss'].item(), self.current_episode)
-            logging.info(f"EPSIODE:{episode} Query_Accuracy: {results['accuracy']:.3f} Meta_Loss: {results['loss'].item():.3f}")
+            self.writer.add_scalar('Meta_Loss/Train', results['loss'], self.current_episode)
+            logging.info(f"EPSIODE:{episode} Query_Accuracy: {results['accuracy']:.3f} Meta_Loss: {results['loss']:.3f}")
 
             if self.current_episode % self.config['valid_freq'] == 0:
                 self.fine_tune(mode = 'validate')
@@ -141,14 +141,14 @@ class FOMAMLTrainer(BaseTrainer):
             if mode == 'validate':
                 episodes = range(len(self.val_loader_iterator[fine_tune_domain]))
             elif mode == 'test':
-                episodes = range(len(self.test_loader_iterator[fine_tune_domain]))
+                episodes = range(10)
 
             logging.info("Fine tuning on domain: " + str(fine_tune_domain) + " num episodes: " + str(episodes))
 
             for episode in episodes:
                 results = self.outer_loop([fine_tune_domain], mode=mode, episode=episode)
                 acc_total += results['accuracy']
-                loss_total += results['loss'].item()
+                loss_total += results['loss']
 
             mean_accuracy = acc_total / (episode + 1)
             mean_loss = loss_total / (episode + 1)
@@ -266,8 +266,10 @@ class FOMAMLTrainer(BaseTrainer):
         else:
             ### for test/valid, we draw a batch in each episode and test on all the rest
             support_batch = batch_iterator[episode]
-            query_chunks = 20
+            query_chunks = 30
             query_batch = self.concatenate_remaining_batches_and_chunk(batch_iterator,episode, query_chunks)
+            ##rewriting with actual number of chunks
+            query_chunks = len(query_batch)
 
 
         support_x, support_masks, support_labels, support_domains = support_batch['x'], support_batch['masks'], support_batch[
@@ -300,6 +302,12 @@ class FOMAMLTrainer(BaseTrainer):
         loss = 0
         query_acc = 0
         for chunkInd in range(query_chunks):
+            ##no grad calc if validation/test
+            if mode != 'training':
+                torch.set_grad_enabled(False)
+            else:
+                torch.set_grad_enabled(True)
+
             query_x, query_masks, query_labels, query_domains = query_batch[chunkInd]['x'], query_batch[chunkInd]['masks'], query_batch[chunkInd]['labels'], \
                                                                 query_batch[chunkInd]['domains']
             query_x = query_x.to(self.config['device'])
@@ -308,8 +316,15 @@ class FOMAMLTrainer(BaseTrainer):
             output = fast_weight_net(x=query_x, masks=query_masks, labels=query_labels,
                                     domains=query_domains)  # domains is ignored for now
             logits = output['logits']
-            loss += output['loss']
+
+            if mode == "training":
+                loss += output['loss']
+            else:
+                #### not saving comp graph if not training
+                loss += output['loss'].item()
             query_acc += output['acc']
+
+        query_acc /= query_chunks
 
         if mode == "training":
 
@@ -319,6 +334,7 @@ class FOMAMLTrainer(BaseTrainer):
 
             grad_head = fast_weight_net.get_head_grads()
             grad_bert = fast_weight_net.get_bert_grads()
+            loss = loss.item()
 
         elif mode == "validate" or mode == "test":
             grad_head, grad_bert = None, None
@@ -335,7 +351,7 @@ class FOMAMLTrainer(BaseTrainer):
         domains = None
 
         batches = []
-        for ind in range(num_chunks):
+        for ind in range(len(x)):
             batches.append({"x":x[ind], "masks":masks[ind], "labels":labels[ind], "domains": None})
 
         return batches

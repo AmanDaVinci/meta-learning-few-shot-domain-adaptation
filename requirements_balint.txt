@@ -1,4 +1,3 @@
-absl-py==0.9.0
 altair==4.0.0
 argh==0.26.2
 asn1crypto==1.2.0
@@ -26,7 +25,6 @@ decorator==4.4.1
 defusedxml==0.6.0
 dill==0.2.9
 docutils==0.15.2
-en-core-web-sm==2.0.0
 entrypoints==0.3
 enum-compat==0.0.3
 future==0.18.2
@@ -55,18 +53,12 @@ MarkupSafe==1.1.1
 matplotlib==3.0.3
 mccabe==0.6.1
 mistune==0.8.4
-mkl-fft==1.0.10
-mkl-random==1.0.2
 more-itertools==8.0.2
 msgpack==0.5.6
 msgpack-numpy==0.4.4.3
 murmurhash==0.28.0
 mypy==0.740
 mypy-extensions==0.4.1
-nb-conda==2.2.1
-nb-conda-kernels==2.2.2
-nbconvert==5.6.1
-nbformat==4.4.0
 nltk==3.4.5
 notebook==6.0.2
 numpy==1.16.2
@@ -83,7 +75,6 @@ plac==0.9.6
 preshed==1.0.1
 prometheus-client==0.7.1
 prompt-toolkit==3.0.2
-protobuf==3.11.4
 psutil==5.6.7
 ptyprocess==0.6.0
 pyasn1==0.4.8
@@ -112,7 +103,6 @@ scipy==1.4.1
 Send2Trash==1.5.0
 sentencepiece==0.1.85
 SentEval==0.1.0
-six==1.12.0
 smart-open==1.9.0
 spacy==2.0.12
 streamlit==0.52.2
@@ -139,7 +129,6 @@ urllib3==1.25.7
 validators==0.14.1
 watchdog==0.9.0
 wcwidth==0.1.7
-web==0.0.1
 webencodings==0.5.1
 Werkzeug==1.0.1
 wrapt==1.11.2

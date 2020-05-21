@@ -45,9 +45,14 @@ class MultitaskTrainer(BaseTrainer):
         train_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
                                       keep_datasets=config['train_domains'],
                                       random_state=config['random_state'], validation_size=0)
-        val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
-                                    keep_datasets=config['val_domains'],
-                                    random_state=config['random_state'], validation_size=0)
+        if self.config['test_same_domains']:
+            val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='test',
+                                        keep_datasets=config['train_domains'],
+                                        random_state=config['random_state'], validation_size=0)
+        else:
+            val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
+                                        keep_datasets=config['val_domains'],
+                                        random_state=config['random_state'], validation_size=0)
         test_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
                                      keep_datasets=config['test_domains'],
                                      random_state=config['random_state'], validation_size=0)
@@ -76,13 +81,19 @@ class MultitaskTrainer(BaseTrainer):
         """Main training loop."""
         assert self.config['collapse_domains'] == True, 'only implemented for collapse_domains=True'
         logging.info("***** Running training *****")
-        logging.info("  Num examples = %d", len(self.train_loader))
+        logging.info("  Num Batches = %d", len(self.train_loader))
         logging.info("  Num Epochs = %d", self.config['epochs'])
         logging.info("  Batch size = %d", self.config['batch_size'])
         for epoch in range(self.current_epoch, self.config['epochs']):
             self.current_epoch = epoch
 
             for i, batch in enumerate(self.train_loader):
+                # num_examples overrides n_epochs
+                if ('num_examples' in self.config and self.config['num_examples'] > 0 and
+                    self.current_iter * self.config['batch_size'] >= self.config['num_examples']):
+                        # we have seen num_examples examples, stop training loop
+                        return
+
                 self.current_iter += 1
                 results = self._batch_iteration(batch, training=True)
 

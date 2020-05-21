@@ -16,7 +16,6 @@ new_config = {
     'inner_gd_steps': 3,
     'unfreeze_layers': (10, 11),
     'num_examples' : 3500,
-    'device':'cpu'
 }
 
 config = get_config(base_config, new_config)

@@ -139,9 +139,9 @@ class FOMAMLTrainer(BaseTrainer):
             acc_total = 0
             loss_total = 0
             if mode == 'validate':
-                episodes = range(len(self.val_loader_iterator[fine_tune_domain]))
+                episodes = range(self.config['val_episodes'])
             elif mode == 'test':
-                episodes = range(10)
+                episodes = range(len(self.test_loader_iterator[fine_tune_domain]))
 
             logging.info("Fine tuning on domain: " + str(fine_tune_domain) + " num episodes: " + str(episodes))
 
@@ -266,7 +266,7 @@ class FOMAMLTrainer(BaseTrainer):
         else:
             ### for test/valid, we draw a batch in each episode and test on all the rest
             support_batch = batch_iterator[episode]
-            query_chunks = 30
+            query_chunks = 4
             query_batch = self.concatenate_remaining_batches_and_chunk(batch_iterator,episode, query_chunks)
             ##rewriting with actual number of chunks
             query_chunks = len(query_batch)
@@ -305,8 +305,6 @@ class FOMAMLTrainer(BaseTrainer):
             ##no grad calc if validation/test
             if mode != 'training':
                 torch.set_grad_enabled(False)
-            else:
-                torch.set_grad_enabled(True)
 
             query_x, query_masks, query_labels, query_domains = query_batch[chunkInd]['x'], query_batch[chunkInd]['masks'], query_batch[chunkInd]['labels'], \
                                                                 query_batch[chunkInd]['domains']
@@ -340,6 +338,10 @@ class FOMAMLTrainer(BaseTrainer):
             grad_head, grad_bert = None, None
 
         results = {'accuracy': query_acc, 'loss': loss}
+
+        ##resetting require grad
+        torch.set_grad_enabled(True)
+
         return grad_head, grad_bert, results
 
     def concatenate_remaining_batches_and_chunk(self, iterator, index, num_chunks):

@@ -10,6 +10,7 @@ new_config = {
     'collapse_domains' : False,
     'exp_name': 'maml_train',
     'episodes': 500,
+    'val_episodes':10,
     'domain_sampling_strategy' : "uniform",
     'inner_gd_steps': 3,
     'unfreeze_layers': (10, 11),

@@ -18,7 +18,7 @@ pd.options.mode.chained_assignment = None  # ignore annoying pandas warnings
 
 DATASETS = ['apparel', 'baby', 'books', 'camera_photo', 'electronics',
             'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines',
-            'music', 'software', 'sports_outdoors', 'toys_games', 'video']
+            'music', 'software', 'sports_outdoors', 'toys_games', 'video', 'MR', 'dvd']
 
 
 class SingleTaskDataset(Dataset):
@@ -112,7 +112,7 @@ class MultiTaskDataset(Dataset):
             train_set, val_set, test_set = None, None, None
             if self.split in ('train', 'val', 'all'):
                 train_file = dataset + '.task.train'
-                train_val_set = pd.read_csv(self.data_dir / train_file, sep='\t', header=None, names=col_names)
+                train_val_set = pd.read_csv(self.data_dir / train_file, sep='\t', header=None, names=col_names, engine='python')
                 if validation_size == 0:  # only do split when validation_size > 0
                     train_set = train_val_set
                 else:

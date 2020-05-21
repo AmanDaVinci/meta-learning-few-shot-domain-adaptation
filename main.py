@@ -22,6 +22,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default="configs.evaluation_config", help='experiment configuration dict')
     parser.add_argument('--trainer', default=None, type=str, help='Type of trainer model')
+    parser.add_argument('--exp_name', default=None, type=str, help='Experiment name. Results saved in this folder.')
     parser.add_argument('--train', default=True, action='store_true', help='whether to train')
     # TODO: implement no_cuda
     parser.add_argument("--no_cuda", action="store_true", help='Whether not to use CUDA when available')
@@ -29,6 +30,12 @@ def main():
     parser.add_argument("--k_shot", default=None, type=int, help='K in K-shot evaluation.')
     parser.add_argument("--batch_size", default=None, type=int, help='Train batch size.')
     parser.add_argument("--epochs", default=None, type=int, help='How many epochs to train for.')
+    parser.add_argument("--validation_size", default=None, type=float, help='Percentage of train split to use as validation.')
+    parser.add_argument("--num_examples", default=None, type=int,
+                        help='How many examples the model should be trained on. Overrides epochs.')
+    parser.add_argument("--test_same_domains", default=False, action='store_true',
+                        help=('If present, validation is on test set of train domains. Can be used '
+                              'to test overfitting on domains compared to data.'))
     parser.add_argument("--n_evaluations", default=None, type=int, help='How many times to evaluate on test domains.')
     # parser.add_argument('--test', type=bool, help='whether to test')
     args = parser.parse_args()
@@ -36,7 +43,7 @@ def main():
     config_module = importlib.import_module(args.config)
     for arg_name, value in args.__dict__.items():
         # if a parameter is specified, overwrite config
-        if arg_name in config_module.config and value is not None:
+        if value is not None:
             config_module.config[arg_name] = value
     if args.no_cuda:
         config_module.config['device'] = 'cpu'

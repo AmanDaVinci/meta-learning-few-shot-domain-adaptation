@@ -57,22 +57,23 @@ class FOMAMLTrainer(BaseTrainer):
 
         # loaders are now dicts mapping from domains to individual loaders
         ### k-shot is defined per class (pos/negative), so here we multiply by 2, as we just sample the whole data
-        self.train_loader = train_data.episodic_dataloaders(batch_size=config['k_shot_num'],
+        train_loader = train_data.episodic_dataloaders(batch_size=config['k_shot_num'],
                                                          collate_fn=train_data.collator, shuffle=True)
-        self.val_loader = val_data.episodic_dataloaders(batch_size=config['k_shot_num'],
+        val_loader = val_data.episodic_dataloaders(batch_size=config['k_shot_num'],
                                                      collate_fn=val_data.collator, shuffle=True)
-        self.test_loader = test_data.episodic_dataloaders(batch_size=config['k_shot_num'],
+        test_loader = test_data.episodic_dataloaders(batch_size=config['k_shot_num'],
                                                        collate_fn=test_data.collator, shuffle=True)
 
-        print(len(list(self.val_loader[0])))
-        print(len(list(self.val_loader[1])))
-        exit()
+        ### concatenating pos and neg to create balanced batches
+        self.train_loader = self.prepare_balanced_batches(train_loader)
+        self.val_loader = self.prepare_balanced_batches(val_loader)
+        self.test_loader = self.prepare_balanced_batches(test_loader)
+
         ## concatenate pos and neg batches to create balanced batches
 
-        ## define iterators
+        ## define iterator for train (other use list for indexing)
         self.train_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.train_loader.items()}
-        self.val_loader_iterator = {domain: list(iter(domain_loader)) for domain, domain_loader in self.val_loader.items()}
-        self.test_loader_iterator = {domain: list(iter(domain_loader)) for domain, domain_loader in self.test_loader.items()}
+
 
         self.train_examples_per_episode = config['k_shot_num']*4 *  config['n_domains']
 
@@ -133,9 +134,11 @@ class FOMAMLTrainer(BaseTrainer):
         if mode == 'validate':
             logging.info("***** Running evaluation *****")
             domains = self.config['val_domains']
+            episodes = range(self.config['val_episodes'])
         elif mode == 'test':
             logging.info("***** Running test *****")
             domains = self.config['test_domains']
+            episodes = range(self.config['test_episodes'])
 
         acc_across_domains = 0
         loss_across_domains = 0
@@ -143,11 +146,7 @@ class FOMAMLTrainer(BaseTrainer):
         for fine_tune_domain in domains:
             acc_total = 0
             loss_total = 0
-            if mode == 'validate':
-                episodes = range(self.config['val_episodes'])
-            elif mode == 'test':
-                episodes = range(len(self.test_loader_iterator[fine_tune_domain]))
-
+    
             logging.info("Fine tuning on domain: " + str(fine_tune_domain) + " num episodes: " + str(episodes))
 
             for episode in episodes:
@@ -191,9 +190,9 @@ class FOMAMLTrainer(BaseTrainer):
         if mode == 'training':
             loader = self.train_loader_iterator
         elif mode == 'validate':
-            loader = self.val_loader_iterator
+            loader = self.val_loader
         elif mode == 'test':
-            loader = self.test_loader_iterator
+            loader = self.test_loader
 
         domain_grads_head = []
         domain_grads_bert = []
@@ -224,6 +223,10 @@ class FOMAMLTrainer(BaseTrainer):
 
             meta_loss += results["loss"]
             meta_acc += results["accuracy"]
+
+            if mode != 'training':
+                ### reshuffling list, so next fine tuning is random
+                shuffle(loader[domain])
 
         ### updating main parameters - head
         
@@ -362,3 +365,21 @@ class FOMAMLTrainer(BaseTrainer):
             batches.append({"x":x[ind], "masks":masks[ind], "labels":labels[ind], "domains": None})
 
         return batches
+
+    def prepare_balanced_batches(self, ep_loader):
+        balanced = {}
+        for domain in ep_loader:
+            pos_loader = list(domain[0])
+            neg_loader = list(domain[1])
+            min_len = min(len(pos_loader), len(neg_loader))
+            domain_name = pos_loader[0]['domains'][0]
+            balanced[domain_name] = []
+            for batch_ind in range(min_len):
+                balanced_dict = {
+                    "x": torch.cat((pos_loader[batch_ind]["x"], neg_loader[batch_ind]['x'])),
+                    "masks": torch.cat((pos_loader[batch_ind]["masks"], neg_loader[batch_ind]['masks'])),
+                    "labels": torch.cat((pos_loader[batch_ind]["labels"], neg_loader[batch_ind]['labels'])),
+                    "domains": []       ### we don't use this part so leave it blank
+                }
+                balanced[domain_name].append(balanced_dict)
+        return balanced

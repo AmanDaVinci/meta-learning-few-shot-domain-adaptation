@@ -3,7 +3,7 @@ from .base_config import base_config, get_config
 
 new_config = {
     'trainer': 'evaluation',
-    'exp_name': 'multitask_test3',
+    'exp_name': 'multitask_11-12',
     'weight_decay': 0,
     'lr': 1e-5,
     'epochs': 3,

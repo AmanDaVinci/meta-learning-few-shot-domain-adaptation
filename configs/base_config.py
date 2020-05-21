@@ -19,11 +19,12 @@ base_config = {
     'transformer_name': 'bert-base-uncased',
     'domains': ['apparel', 'baby', 'books', 'camera_photo', 'electronics',
                 'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines',
-                'music', 'software', 'sports_outdoors', 'toys_games', 'video'],
-    'train_domains': ['apparel', 'baby', 'books', 'camera_photo', 'health_personal_care',
-                        'imdb', 'kitchen_housewares', 'magazines', 'sports_outdoors', 'toys_games'],
-    'val_domains': ['software', 'electronics'],
-    'test_domains': ['music', 'video'],
+                'music', 'software', 'sports_outdoors', 'toys_games', 'video', 'MR', 'dvd'],
+    'train_domains':  ['apparel', 'baby', 'books', 'camera_photo', 'electronics',
+                'health_personal_care', 'imdb', 'kitchen_housewares', 'magazines',
+                'music', 'software', 'sports_outdoors', 'toys_games', 'video', 'MR', 'dvd'],
+    'val_domains': ['imdb'],
+    'test_domains': ['MR'],
     'log_level': logging.INFO,
     'log_freq': 100
 }

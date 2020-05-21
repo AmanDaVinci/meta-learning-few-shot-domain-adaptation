@@ -57,12 +57,17 @@ class FOMAMLTrainer(BaseTrainer):
 
         # loaders are now dicts mapping from domains to individual loaders
         ### k-shot is defined per class (pos/negative), so here we multiply by 2, as we just sample the whole data
-        self.train_loader = train_data.domain_dataloaders(batch_size=config['k_shot_num']*2,
-                                                          shuffle=True)
-        self.val_loader = val_data.domain_dataloaders(batch_size=config['k_shot_num']*2,
-                                                      shuffle=False)
-        self.test_loader = test_data.domain_dataloaders(batch_size=config['k_shot_num']*2,
-                                                        shuffle=False)
+        self.train_loader = train_data.episodic_dataloaders(batch_size=config['k_shot_num'],
+                                                         collate_fn=train_data.collator, shuffle=True)
+        self.val_loader = val_data.episodic_dataloaders(batch_size=config['k_shot_num'],
+                                                     collate_fn=val_data.collator, shuffle=True)
+        self.test_loader = test_data.episodic_dataloaders(batch_size=config['k_shot_num'],
+                                                       collate_fn=test_data.collator, shuffle=True)
+
+        print(len(list(self.val_loader[0])))
+        print(len(list(self.val_loader[1])))
+        exit()
+        ## concatenate pos and neg batches to create balanced batches
 
         ## define iterators
         self.train_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.train_loader.items()}

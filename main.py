@@ -65,8 +65,8 @@ def main():
 
     if args.test:
         ### only 1 version for now
-        for unfrozen_layers in ["(10, 11)"]:
-            for num_examples in ["3500"]:
+        for unfrozen_layers in ["(10, 11)", "(6, 7, 8, 9, 10, 11)"]:
+            for num_examples in ["3500", 'all']:
                 ### loading best model from checkpoint
                 trainer.load_checkpoint(experiment_name = config_module.config['exp_name'], file_name = "unfrozen_bert:" + unfrozen_layers + "_num_examples:" + num_examples + "_best-model.pt")
                 trainer.test()

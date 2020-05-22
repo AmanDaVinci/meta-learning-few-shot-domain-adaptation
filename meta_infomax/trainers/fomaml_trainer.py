@@ -274,7 +274,7 @@ class FOMAMLTrainer(BaseTrainer):
         else:
             ### for test/valid, we draw a batch in each episode and test on all the rest
             support_batch = batch_iterator[episode]
-            query_chunks = 4
+            query_chunks = 10
             query_batch = self.concatenate_remaining_batches_and_chunk(batch_iterator,episode, query_chunks)
             ##rewriting with actual number of chunks
             query_chunks = len(query_batch)

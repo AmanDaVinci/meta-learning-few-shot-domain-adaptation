@@ -14,7 +14,7 @@ new_config = {
     'test_episodes':10,
     'domain_sampling_strategy' : "uniform",
     'inner_gd_steps': 3,
-    'unfreeze_layers': (6,7,8,9,10, 11),
+    'unfreeze_layers': (10, 11),
     'num_examples' : 'all',
 }
 

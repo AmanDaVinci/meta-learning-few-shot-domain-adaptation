@@ -56,7 +56,7 @@ class ProtonetTrainer(BaseTrainer):
                                                          collate_fn=train_data.collator, shuffle=True)
         self.val_dls = val_data.episodic_dataloaders(batch_size=config['n_support']+config['n_query'],
                                                      collate_fn=val_data.collator, shuffle=True)
-        self.test_dls = test_data.episodic_dataloaders(batch_size=config['n_support']+config['n_query'],
+        self.test_dls = test_data.episodic_dataloaders(batch_size=config['n_test_query'],
                                                        collate_fn=test_data.collator, shuffle=True)
         self.train_dls = np.array(self.train_dls)
         self.val_dls = np.array(self.val_dls)
@@ -135,15 +135,41 @@ class ProtonetTrainer(BaseTrainer):
         """ Main validation loop """
 
         self.load_checkpoint(self.config['exp_name'], checkpoint_name)
+        self.model.eval()
+
         for domain_dataloader in self.test_dls:
             domain_losses = []
             domain_accuracies = []
+
+            # compute support embeddings
+            neg_batch = next(iter(domain_dataloader[0]))
+            pos_batch = next(iter(domain_dataloader[1]))
+            neg_support_x = pos_batch['x'][:self.config['n_support']]
+            pos_support_x = neg_batch['x'][:self.config['n_support']]
+            neg_support_masks = pos_batch['masks'][:self.config['n_support']]
+            pos_support_masks = neg_batch['masks'][:self.config['n_support']]
+            with torch.no_grad():
+                pos_support_embeds = self.model(pos_support_x.to(self.config['device']), pos_support_masks.to(self.config['device']))
+                neg_support_embeds = self.model(neg_support_x.to(self.config['device']), neg_support_masks.to(self.config['device']))
+
+            # compute accuracy over all queries 
             num_episodes = len(domain_dataloader[0])
             for i in range(num_episodes):
                 episode, domain = self._prepare_episode(domain_dataloader) 
-                results = self._episode_iteration(episode, training=False)
-                domain_losses.append(results['loss'])
-                domain_accuracies.append(results['accuracy'])
+                x, masks = episode
+                x = x.to(self.config['device'])
+                masks = masks.to(self.config['device'])
+                with torch.no_grad():
+                    x_embeds = self.model(x, masks)
+                x = torch.cat([
+                    pos_support_embeds,
+                    x_embeds[:self.config['n_test_query'], :],
+                    neg_support_embeds,
+                    x_embeds[self.config['n_test_query']:, :]
+                ])
+                loss, acc = self.prototypical_loss(x, n_support=self.config['n_support'], n_query=self.config['n_test_query'])
+                domain_losses.append(loss.item())
+                domain_accuracies.append(acc.item())
             domain_mean_accuracy = np.mean(domain_accuracies)
             domain_mean_loss = np.mean(domain_losses)
             report = (f"Domain: {domain} "

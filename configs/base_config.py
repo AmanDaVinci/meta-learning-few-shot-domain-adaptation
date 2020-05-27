@@ -22,9 +22,9 @@ base_config = {
                 'music', 'software', 'sports_outdoors', 'toys_games', 'video', 'MR', 'dvd'],
     'train_domains':  ['apparel', 'baby', 'books', 'camera_photo', 'electronics',
                 'health_personal_care', 'kitchen_housewares', 'magazines',
-                'music', 'software', 'sports_outdoors', 'toys_games', 'video', 'dvd'],
-    'val_domains': ['imdb'],
-    'test_domains': ['MR'],
+                'music', 'software', 'toys_games', 'video', 'MR', 'imdb'],
+    'val_domains': ['sports_outdoors'],
+    'test_domains': ['dvd'],
     'log_level': logging.INFO,
     'log_freq': 100
 }

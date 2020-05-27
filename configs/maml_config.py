@@ -15,7 +15,7 @@ new_config = {
     'domain_sampling_strategy' : "uniform",
     'inner_gd_steps': 3,
     'unfreeze_layers': (10, 11),
-    'num_examples' : 3500,
+    'num_examples' : 'all',
 }
 
 config = get_config(base_config, new_config)

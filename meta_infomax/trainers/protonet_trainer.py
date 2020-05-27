@@ -43,6 +43,12 @@ class ProtonetTrainer(BaseTrainer):
         self.model.freeze_bert(until_layer=config['freeze_until_layer'])
         self.model.to(config['device'])
 
+        logging.info(f"Setting seed: {config['seed']}")
+        np.random.seed(config['seed'])
+        torch.manual_seed(config['seed'])
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
         train_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
                                       keep_datasets=config['train_domains'], random_state=config['random_state'],
                                       validation_size=0, const_len=True)

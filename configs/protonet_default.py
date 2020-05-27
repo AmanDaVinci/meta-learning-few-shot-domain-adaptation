@@ -6,6 +6,7 @@ new_config = {
     'num_training_examples': 14000,
     'n_support': 5,
     'n_query': 20,
+    'n_test_query': 100,
     'freeze_until_layer': 10,
 }
 

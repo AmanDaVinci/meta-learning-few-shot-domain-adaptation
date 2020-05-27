@@ -42,34 +42,36 @@ def main():
     args = parser.parse_args()
 
     config_module = importlib.import_module(args.config)
-    for arg_name, value in args.__dict__.items():
-        # if a parameter is specified, overwrite config
-        if value is not None:
-            config_module.config[arg_name] = value
-    if args.no_cuda:
-        config_module.config['device'] = 'cpu'
-    trainer_type = config_module.config['trainer']
-    assert trainer_type in (MULTITASK_TRAINER, MAML_TRAINER, PROTOTYPICAL_TRAINER, EVALUATION_TRAINER), \
-        'Make sure you have specified a correct trainer.'
-    if trainer_type == MULTITASK_TRAINER:
-        trainer = MultitaskTrainer(config_module.config)
-    elif trainer_type == MAML_TRAINER:
-        trainer = FOMAMLTrainer(config_module.config)
-    elif trainer_type == PROTOTYPICAL_TRAINER:
-        trainer = ProtonetTrainer(config_module.config)
-    elif trainer_type == EVALUATION_TRAINER:
-        trainer = EvaluationTrainer(config_module.config)
+    for random_seed in [40, 41, 42]:
+        config_module.config['seed'] = random_seed
+        for arg_name, value in args.__dict__.items():
+            # if a parameter is specified, overwrite config
+            if value is not None:
+                config_module.config[arg_name] = value
+        if args.no_cuda:
+            config_module.config['device'] = 'cpu'
+        trainer_type = config_module.config['trainer']
+        assert trainer_type in (MULTITASK_TRAINER, MAML_TRAINER, PROTOTYPICAL_TRAINER, EVALUATION_TRAINER), \
+            'Make sure you have specified a correct trainer.'
+        if trainer_type == MULTITASK_TRAINER:
+            trainer = MultitaskTrainer(config_module.config)
+        elif trainer_type == MAML_TRAINER:
+            trainer = FOMAMLTrainer(config_module.config)
+        elif trainer_type == PROTOTYPICAL_TRAINER:
+            trainer = ProtonetTrainer(config_module.config)
+        elif trainer_type == EVALUATION_TRAINER:
+            trainer = EvaluationTrainer(config_module.config)
 
-    if args.train:
-        trainer.run()
+        if args.train:
+            trainer.run()
 
-    if args.test:
-        ### only 1 version for now
-        for unfrozen_layers in ["(10, 11)", "(6, 7, 8, 9, 10, 11)"]:
-            for num_examples in ["3500", 'all']:
-                ### loading best model from checkpoint
-                trainer.load_checkpoint(experiment_name = config_module.config['exp_name'], file_name = "unfrozen_bert:" + unfrozen_layers + "_num_examples:" + num_examples + "_best-model.pt")
-                test_res = trainer.test()
+        if args.test:
+            ### only 1 version for now
+            for unfrozen_layers in ["(10, 11)", "(6, 7, 8, 9, 10, 11)"]:
+                for num_examples in ["3500", 'all']:
+                    ### loading best model from checkpoint
+                    trainer.load_checkpoint(experiment_name = config_module.config['exp_name'], file_name = "unfrozen_bert:" + unfrozen_layers + "_num_examples:" + num_examples + "_seed:" + str(random_seed) + "_best-model.pt")
+                    test_res = trainer.test()
 
 
 if __name__ == "__main__":

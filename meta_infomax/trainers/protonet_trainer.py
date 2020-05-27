@@ -83,6 +83,7 @@ class ProtonetTrainer(BaseTrainer):
         logging.info(f"  Query Set Size = {self.config['n_query']}")
 
         self.validate()
+        self.test()
         while self.seen_examples < self.config['num_training_examples']:
             for domain_dataloader in self.train_dls:
                 self.current_iter += 1
@@ -95,6 +96,7 @@ class ProtonetTrainer(BaseTrainer):
                             f"Accuracy: {results['accuracy']:.3f} "
                             f"Prototypical Loss: {results['loss']:.3f}")
             self.validate()
+            self.test()
         logging.info(f"Seen {self.seen_examples} examples. Stop training.")
 
     def validate(self):
@@ -132,7 +134,7 @@ class ProtonetTrainer(BaseTrainer):
             self.save_checkpoint(self.BEST_MODEL_FNAME)
 
     def test(self, checkpoint_name=None):
-        """ Main validation loop """
+        """ Main testing loop """
 
         self.load_checkpoint(self.config['exp_name'], checkpoint_name)
         self.model.eval()
@@ -172,10 +174,14 @@ class ProtonetTrainer(BaseTrainer):
                 domain_accuracies.append(acc.item())
             domain_mean_accuracy = np.mean(domain_accuracies)
             domain_mean_loss = np.mean(domain_losses)
-            report = (f"Domain: {domain} "
+            self.writer.add_scalar(f'Test-{domain}/Accuracy-vs-Iterations', domain_mean_accuracy, self.current_iter)
+            self.writer.add_scalar(f'Test-{domain}/Loss-vs-Iterations', domain_mean_loss, self.current_iter)
+            self.writer.add_scalar(f'Test-{domain}/Accuracy-vs-Seen-Examples', domain_mean_accuracy, self.seen_examples)
+            self.writer.add_scalar(f'Test-{domain}/Loss-vs-Seen-Examples', domain_mean_loss, self.seen_examples)
+            report = (f"[Test] \t Domain: {domain} "
                       f"Average accuracy: {domain_mean_accuracy:.3f} "
                       f"Average loss: {domain_mean_loss:.3f}")
-            print(report)
+            logging.info(report)
 
     def _episode_iteration(self, episode: tuple, training: bool):
         """ Iterate over one episode """

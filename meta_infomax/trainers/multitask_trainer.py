@@ -87,9 +87,9 @@ class MultitaskTrainer(BaseTrainer):
         logging.info("  Batch size = %d", self.config['batch_size'])
         for epoch in range(self.current_epoch, self.config['epochs']):
             self.current_epoch = epoch
-            self.n_examples_seen = self.current_iter * self.config['batch_size']
 
             for i, batch in enumerate(self.train_loader):
+                self.n_examples_seen = self.current_iter * self.config['batch_size']
                 # num_examples overrides n_epochs
                 if ('num_examples' in self.config and self.config['num_examples'] > 0 and
                     self.n_examples_seen >= self.config['num_examples']):

@@ -2,7 +2,7 @@ from collections import OrderedDict, Counter
 
 import itertools
 import numpy as np
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 
 from meta_infomax.datasets import utils
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset, DATASETS
@@ -73,6 +73,7 @@ class PMIScorer:
             self.datasets_test[ds_name].data = self.datasets_test[ds_name].data.iloc[ranking]
 
         return self.datasets_test
+
 
 if __name__ == "__main__":
     bert, tokenizer, _ = utils.get_transformer("bert-base-uncased")

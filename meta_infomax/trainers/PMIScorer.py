@@ -74,7 +74,7 @@ class PMIScorer:
 
         return self.datasets_test
 
-
-bert, tokenizer, _ = utils.get_transformer("bert-base-uncased")
-scorer = PMIScorer(tokenizer, ["dvd", "video"])
-sorted_ds = scorer.sort_datasets()
+if __name__ == "__main__":
+    bert, tokenizer, _ = utils.get_transformer("bert-base-uncased")
+    scorer = PMIScorer(tokenizer, ["dvd", "video"])
+    sorted_ds = scorer.sort_datasets()

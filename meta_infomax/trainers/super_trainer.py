@@ -84,11 +84,12 @@ class BaseTrainer:
         self.current_epoch = 0
         self.best_accuracy = 0.
 
-        logging.info(f"Setting seed: {config['seed']}")
-        np.random.seed(config['seed'])
-        torch.manual_seed(config['seed'])
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        if 'seed' in config:
+            logging.info(f"Setting seed: {config['seed']}")
+            np.random.seed(config['seed'])
+            torch.manual_seed(config['seed'])
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
 
     def run(self):
         """ Run the train-eval loop

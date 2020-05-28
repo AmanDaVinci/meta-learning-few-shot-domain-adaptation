@@ -76,6 +76,7 @@ class MultitaskTrainer(BaseTrainer):
         self.bert_scheduler = get_linear_schedule_with_warmup(self.bert_opt,
                                                               num_warmup_steps=config['warmup_steps'],
                                                               num_training_steps=len(self.train_loader) * config['epochs'])
+        self.n_examples_seen = 0
 
     def train(self):
         """Main training loop."""
@@ -88,9 +89,10 @@ class MultitaskTrainer(BaseTrainer):
             self.current_epoch = epoch
 
             for i, batch in enumerate(self.train_loader):
+                self.n_examples_seen = self.current_iter * self.config['batch_size']
                 # num_examples overrides n_epochs
                 if ('num_examples' in self.config and self.config['num_examples'] > 0 and
-                    self.current_iter * self.config['batch_size'] >= self.config['num_examples']):
+                    self.n_examples_seen >= self.config['num_examples']):
                         # we have seen num_examples examples, stop training loop
                         return
 
@@ -99,6 +101,8 @@ class MultitaskTrainer(BaseTrainer):
 
                 self.writer.add_scalar('Accuracy/Train', results['accuracy'], self.current_iter)
                 self.writer.add_scalar('Loss/Train', results['loss'], self.current_iter)
+                self.writer.add_scalar('Accuracy/Train-Examples', results['accuracy'], self.n_examples_seen)
+                self.writer.add_scalar('Loss/Train-Examples', results['loss'], self.n_examples_seen)
 
                 # TODO: only every log_freq steps
                 # TODO: also write to csv file every log_freq steps
@@ -127,6 +131,8 @@ class MultitaskTrainer(BaseTrainer):
             self.save_checkpoint(self.BEST_MODEL_FNAME)
         self.writer.add_scalar('Accuracy/Valid', mean_accuracy, self.current_iter)
         self.writer.add_scalar('Loss/Valid', mean_loss, self.current_iter)
+        self.writer.add_scalar('Accuracy/Valid-Examples', mean_accuracy, self.n_examples_seen)
+        self.writer.add_scalar('Loss/Valid-Examples', mean_loss, self.n_examples_seen)
 
         report = (f"[Validation]\t"
                   f"Accuracy: {mean_accuracy:.3f} "

@@ -38,6 +38,7 @@ def main():
                         help=('If present, validation is on test set of train domains. Can be used '
                               'to test overfitting on domains compared to data.'))
     parser.add_argument("--n_evaluations", default=None, type=int, help='How many times to evaluate on test domains.')
+    parser.add_argument("--seed", default=None, type=int, help='Random seed.')
     # parser.add_argument('--test', type=bool, help='whether to test')
     args = parser.parse_args()
 

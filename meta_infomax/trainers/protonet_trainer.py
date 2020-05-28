@@ -43,7 +43,6 @@ class ProtonetTrainer(BaseTrainer):
         self.model.freeze_bert(until_layer=config['freeze_until_layer'])
         self.model.to(config['device'])
 
-
         train_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
                                       keep_datasets=config['train_domains'], random_state=config['random_state'],
                                       validation_size=0, const_len=True)
@@ -132,12 +131,15 @@ class ProtonetTrainer(BaseTrainer):
         mean_accuracy = np.mean(total_accuracies)
         if mean_accuracy > self.best_accuracy:
             self.best_accuracy = mean_accuracy
-            self.save_checkpoint(self.BEST_MODEL_FNAME)
+            if self.seen_examples < self.config['save_at']:
+                self.save_checkpoint('limited_'+self.BEST_MODEL_FNAME)
+            else:
+                self.save_checkpoint(self.BEST_MODEL_FNAME)
 
     def test(self, checkpoint_name=None):
         """ Main testing loop """
 
-        self.load_checkpoint(self.config['exp_name'], checkpoint_name)
+        # self.load_checkpoint(self.config['exp_name'], checkpoint_name)
         self.model.eval()
 
         for domain_dataloader in self.test_dls:

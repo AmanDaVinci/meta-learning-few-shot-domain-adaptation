@@ -15,12 +15,12 @@ class PMIScorer:
 
         datasets = {f"{ds}_{lb}": data.subset_datasets(domains=[ds], label=lb)[ds]
                     for ds in DATASETS for lb in [0, 1]}
+        datasets["all_data"] = data
 
         data_test = MultiTaskDataset(tokenizer, split="train", keep_datasets=keep_datasets, validation_size=0)
         self.datasets_test = {f"{ds}_{lb}": data_test.subset_datasets(domains=[ds], label=lb)[ds]
                               for ds in keep_datasets for lb in [0, 1]}
 
-        datasets["all_data"] = MultiTaskDataset(tokenizer, split="all", validation_size=0)
         get_counter = lambda dataset: Counter(
             list(itertools.chain.from_iterable(
                 # it is a list of lists that needs to be flattened
@@ -67,7 +67,14 @@ class PMIScorer:
 
         return sort_idxs
 
+    def sort_datasets(self):
+        rankings = {ds_name: self.score_samples(ds_name) for ds_name, ds in self.datasets_test.items()}
+        for ds_name, ranking in rankings.items():
+            self.datasets_test[ds_name].data = self.datasets_test[ds_name].data.iloc[ranking]
+
+        return self.datasets_test
+
 
 bert, tokenizer, _ = utils.get_transformer("bert-base-uncased")
 scorer = PMIScorer(tokenizer, ["dvd", "video"])
-scorer.score_samples("dvd_0")
+sorted_ds = scorer.sort_datasets()

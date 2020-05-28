@@ -98,6 +98,13 @@ class FOMAMLTrainer(BaseTrainer):
         logging.info("  K-shot = %d", self.config['k_shot_num'])
         logging.info("  N-way = %d", self.config['n_domains'])
 
+        ###adding lists for keeping track of the performance through training
+        self.train_log = {
+            'train_accs' : [],
+            'val_accs' : [],
+            'test_accs' : [],
+        }
+
         for episode in range(self.current_episode, self.config['episodes']):
             self.current_episode = episode
 
@@ -114,20 +121,28 @@ class FOMAMLTrainer(BaseTrainer):
             if not results:
                 break
 
+            self.train_log['train_accs'].append(results['accuracy'])
             self.writer.add_scalar('Query_Accuracy/Train', results['accuracy'], self.current_episode)
             self.writer.add_scalar('Meta_Loss/Train', results['loss'], self.current_episode)
             logging.info(f"EPSIODE:{episode} Query_Accuracy: {results['accuracy']:.3f} Meta_Loss: {results['loss']:.3f}")
 
             if self.current_episode % self.config['valid_freq'] == 0:
-                self.fine_tune(mode = 'validate')
-            
+                self.train_log['val_accs'].append(self.fine_tune(mode = 'validate'))
+                self.train_log['test_accs'].append(self.fine_tune(mode = 'test'))
+
             ## break if number of examples exceed the threshold
             if (self.config['num_examples'] != 'all' and episode * self.train_examples_per_episode  > self.config['num_examples']):
                 logging.info("Breaking training: num examples threshold exceeded")
                 break
 
+        ### final validation and test before finishing
+        self.train_log['val_accs'].append(self.fine_tune(mode = 'validate'))
+        self.train_log['test_accs'].append(self.fine_tune(mode = 'test')) 
+        logging.info("Training finished with performance:")
+        logging.info(self.train_log)
+
     def test(self):
-        self.fine_tune(mode = 'test')
+        return self.fine_tune(mode = 'test')
 
     def fine_tune(self, mode):
         """ Main validation loop """
@@ -157,7 +172,7 @@ class FOMAMLTrainer(BaseTrainer):
             mean_accuracy = acc_total / (episode + 1)
             mean_loss = loss_total / (episode + 1)
 
-            report = (f"[Validation]\t"
+            report = (f"[" + mode + "]\t"
                     f"Query_Accuracy: {mean_accuracy:.3f} "
                     f"Total Meta_Loss: {mean_loss:.3f}")
             logging.info("Domain " + fine_tune_domain  + " performance")
@@ -172,15 +187,17 @@ class FOMAMLTrainer(BaseTrainer):
         loss_across_domains /= total_episodes
         if acc_across_domains > self.best_accuracy and mode == 'validate':
             self.best_accuracy = acc_across_domains
-            self.save_checkpoint("unfrozen_bert:"+ str(self.config['unfreeze_layers']) + "_num_examples:" + str(self.config['num_examples']) + "_" + self.BEST_MODEL_FNAME)
+            self.save_checkpoint("unfrozen_bert:"+ str(self.config['unfreeze_layers']) + "_num_examples:" + str(self.config['num_examples']) + "_seed:" + str(self.config['seed']) + "_" + self.BEST_MODEL_FNAME)
         self.writer.add_scalar('Avg_FineTune_Accuracy/' + mode, acc_across_domains, self.current_episode)
         self.writer.add_scalar('Avg_FineTune_Loss/' + mode, loss_across_domains, self.current_episode)
 
-        report = (f"[Validation]\t"
+        report = (f"[" + mode + "]\t"
                 f"Query_Accuracy: {acc_across_domains:.3f} "
                 f"Total Meta_Loss: {loss_across_domains:.3f}")
         logging.info("Average fine tune performance across domains")
         logging.info(report)
+
+        return acc_across_domains
 
     def outer_loop(self, domains, mode: str, episode = None):
         """ Iterate over one batch """
@@ -274,7 +291,7 @@ class FOMAMLTrainer(BaseTrainer):
         else:
             ### for test/valid, we draw a batch in each episode and test on all the rest
             support_batch = batch_iterator[episode]
-            query_chunks = 10
+            query_chunks = self.config['valid_chunks']
             query_batch = self.concatenate_remaining_batches_and_chunk(batch_iterator,episode, query_chunks)
             ##rewriting with actual number of chunks
             query_chunks = len(query_batch)

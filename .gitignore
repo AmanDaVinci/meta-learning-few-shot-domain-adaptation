@@ -34,7 +34,7 @@ MANIFEST
 
 ## LISA ignores
 slurm*
-*.job
+
 requirements_balint.txt
 
 # PyInstaller

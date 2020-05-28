@@ -142,7 +142,15 @@ class FOMAMLTrainer(BaseTrainer):
         logging.info(self.train_log)
 
     def test(self):
-        return self.fine_tune(mode = 'test')
+        res =  self.fine_tune(mode = 'test')
+        self.reshuffle_loaders()
+        return res
+
+    def reshuffle_loaders(self):
+        for val_domain, domain_loader in self.val_loader.items():
+            shuffle(domain_loader)
+        for test_domain, domain_loader in self.test_loader.items():
+            shuffle(domain_loader)
 
     def fine_tune(self, mode):
         """ Main validation loop """

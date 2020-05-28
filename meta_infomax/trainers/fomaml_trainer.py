@@ -10,6 +10,7 @@ from typing import Dict
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
 from meta_infomax.trainers.super_trainer import BaseTrainer
 from meta_infomax.datasets.utils import sample_domains
+from meta_infomax.trainers.PMIScorer import PMIScorer
 
 from random import shuffle, choice
 
@@ -141,15 +142,19 @@ class FOMAMLTrainer(BaseTrainer):
         logging.info("Training finished with performance:")
         logging.info(self.train_log)
 
-    def test(self):
+    def test(self, sorted_pmi = False):
+        self.reshuffle_test_loaders(sorted_pmi)
         res =  self.fine_tune(mode = 'test')
-        self.reshuffle_loaders()
         return res
 
-    def reshuffle_loaders(self):
-        for val_domain, domain_loader in self.val_loader.items():
-            shuffle(domain_loader)
+    def reshuffle_test_loaders(self, sorted_pmi):
+
         for test_domain, domain_loader in self.test_loader.items():
+            if sorted_pmi:
+                scorer = PMIScorer(self.tokenizer, [test_domain])
+                sorted_ds = scorer.sort_datasets()
+                print(sorted_ds)
+                exit()
             shuffle(domain_loader)
 
     def fine_tune(self, mode):

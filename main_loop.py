@@ -81,6 +81,8 @@ def main():
                     print("Mean: " + str(np.mean(config_results)))
                     print("SD: " + str(np.std(config_results)) + "\n\n")
 
+            break
+
 
 
 if __name__ == "__main__":

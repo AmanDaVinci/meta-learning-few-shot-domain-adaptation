@@ -6,6 +6,7 @@ from meta_infomax.trainers.protonet_trainer import ProtonetTrainer
 
 
 import argparse
+import numpy as np
 
 from meta_infomax.trainers.evaluation_trainer import EvaluationTrainer
 from meta_infomax.trainers.maml_trainer import MAMLTrainer
@@ -42,7 +43,8 @@ def main():
     args = parser.parse_args()
 
     config_module = importlib.import_module(args.config)
-    for random_seed in [40, 41, 42]:
+    random_seeds = [40, 41, 42]
+    for random_seed in random_seeds:
         config_module.config['seed'] = random_seed
         for arg_name, value in args.__dict__.items():
             # if a parameter is specified, overwrite config
@@ -67,11 +69,18 @@ def main():
 
         if args.test:
             ### only 1 version for now
-            for unfrozen_layers in ["(10, 11)", "(6, 7, 8, 9, 10, 11)"]:
+            for unfrozen_layers in ["(10, 11)"]:
                 for num_examples in ["3500", 'all']:
-                    ### loading best model from checkpoint
-                    trainer.load_checkpoint(experiment_name = config_module.config['exp_name'], file_name = "unfrozen_bert:" + unfrozen_layers + "_num_examples:" + num_examples + "_seed:" + str(random_seed) + "_best-model.pt")
-                    test_res = trainer.test()
+                    config_results = []
+                    for random_seed in random_seeds:
+                        ### loading best model from checkpoint
+                        trainer.load_checkpoint(experiment_name = config_module.config['exp_name'], file_name = "unfrozen_bert:" + unfrozen_layers + "_num_examples:" + num_examples + "_seed:" + str(random_seed) + "_best-model.pt")
+                        config_results.append(trainer.test())
+                    #### averaging the seeds:
+                    print("\n\nLayers " + str(unfrozen_layers) + " Data " + str(num_examples) + " Average results across seeds")
+                    print("Mean: " + str(np.mean(config_results)))
+                    print("SD: " + str(np.std(config_results)) + "\n\n")
+
 
 
 if __name__ == "__main__":

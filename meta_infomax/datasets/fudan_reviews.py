@@ -122,7 +122,7 @@ class MultiTaskDataset(Dataset):
                 train_set['domain'] = dataset  # record which domain it is in dataframe
             elif self.split in ('test', 'all'):
                 test_file = dataset + '.task.test'
-                test_set = pd.read_csv(self.data_dir / test_file, sep='\t', header=None, names=col_names)
+                test_set = pd.read_csv(self.data_dir / test_file, sep='\t', header=None, names=col_names, engine='python')
                 test_set['domain'] = dataset
             if self.split == 'all':
                 dfs.extend([train_set, val_set, test_set])

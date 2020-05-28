@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--test', default=False, action='store_true', help='whether to test')
     # TODO: implement no_cuda
     parser.add_argument("--no_cuda", action="store_true", help='Whether not to use CUDA when available')
+    parser.add_argument("--pmi_scorer", action="store_true", help='Whether or not Pointwise Mutual Information scorer in testing.')
     parser.add_argument("--lr", default=None, type=float, help='Learning rate. Overwrites config.')
     parser.add_argument("--k_shot", default=None, type=int, help='K in K-shot evaluation.')
     parser.add_argument("--batch_size", default=None, type=int, help='Train batch size.')

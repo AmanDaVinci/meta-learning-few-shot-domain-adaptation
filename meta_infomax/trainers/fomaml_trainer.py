@@ -7,10 +7,11 @@ import torch.optim as optim
 from transformers import get_linear_schedule_with_warmup, AdamW
 from typing import Dict
 
-from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
+from meta_infomax.datasets.fudan_reviews import MultiTaskDataset, MultiTaskCollator
 from meta_infomax.trainers.super_trainer import BaseTrainer
 from meta_infomax.datasets.utils import sample_domains
 from meta_infomax.trainers.PMIScorer import PMIScorer
+from torch.utils.data import Dataset, DataLoader
 
 from random import shuffle, choice
 
@@ -142,20 +143,25 @@ class FOMAMLTrainer(BaseTrainer):
         logging.info("Training finished with performance:")
         logging.info(self.train_log)
 
-    def test(self, sorted_pmi = False):
-        self.reshuffle_test_loaders(sorted_pmi)
+    def test(self):
+        self.reshuffle_test_loaders(self.config['sort_test_by_pmi'])
         res =  self.fine_tune(mode = 'test')
         return res
 
-    def reshuffle_test_loaders(self, sorted_pmi):
-
+    def reshuffle_test_loaders(self, sort_pmi):
+        sorted_domains_separated = []
         for test_domain, domain_loader in self.test_loader.items():
-            if sorted_pmi:
+            if sort_pmi:
                 scorer = PMIScorer(self.tokenizer, [test_domain])
                 sorted_ds = scorer.sort_datasets()
-                print(sorted_ds)
-                exit()
-            shuffle(domain_loader)
+                collator = MultiTaskCollator(self.tokenizer, const_len=True)
+                sorted_domains_separated.append([DataLoader(sentiment_data, batch_size=self.config['k_shot_num'],
+                                                       collate_fn=collator, shuffle=False) for domain, sentiment_data in sorted_ds.items()])
+            else:
+                shuffle(domain_loader)
+        if sort_pmi:
+            self.test_loader = self.prepare_balanced_batches(sorted_domains_separated)
+
 
     def fine_tune(self, mode):
         """ Main validation loop """

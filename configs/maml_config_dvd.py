@@ -13,7 +13,7 @@ new_config = {
     'exp_name': 'maml_train',
     'episodes': 500,
     'val_episodes':5,
-    'test_episodes':5,
+    'test_episodes':1,
     'domain_sampling_strategy' : "uniform",
     'inner_gd_steps': 3,
     'unfreeze_layers': (10, 11),
@@ -24,6 +24,7 @@ new_config = {
                 'music', 'software', 'toys_games', 'video', 'MR', 'imdb'],
     'val_domains': ['sports_outdoors'],
     'test_domains': ['dvd'],
+    'sort_test_by_pmi' : True
 }
 
 config = get_config(base_config, new_config)

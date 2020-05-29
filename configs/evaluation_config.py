@@ -12,7 +12,8 @@ new_config = {
     'n_evaluations': 1, # run the experiment with this many different training batches
     'warmup_steps': 0, # number of steps to warm up for learning rate scheduler
     'k_shot': 5, # train on this many samples from test domain
-    'test_domains': ['MR']
+    'test_domains': ['MR'],
+    'pmi_scorer': True
 }
 
 config = get_config(base_config, new_config)

@@ -5,12 +5,14 @@ import numpy as np
 import torch
 from pathlib import Path
 from torch import optim
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AdamW
 import json
 from typing import Dict
 
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset
+from meta_infomax.trainers.PMIScorer import PMIScorer
 from meta_infomax.trainers.super_trainer import BaseTrainer, RESULTS, LOG_DIR
 
 
@@ -61,19 +63,33 @@ class EvaluationTrainer(BaseTrainer):
                                     keep_datasets=config['test_domains'],
                                     random_state=config['random_state'], validation_size=0.8, const_len=True)
 
-        # we sample 1 batch of k samples, train on those samples for `epoch` steps,
-        # and evaluate on the val set
-        # we assume (for now) that k is small enough to fit in memory
-        self.train_loader_positive = train_data.domain_dataloaders(label=1,
-                                                                   batch_size=config['k_shot'],
-                                                                   shuffle=True)
-        self.train_loader_negative = train_data.domain_dataloaders(label=0,
-                                                                   batch_size=config['k_shot'],
-                                                                   shuffle=True)
-        # make iterators for each dataset
-        for domain in self.config['test_domains']:
-            self.train_loader_positive[domain] = iter(self.train_loader_positive[domain])
-            self.train_loader_negative[domain] = iter(self.train_loader_negative[domain])
+        if "pmi_scorer" in config and config["pmi_scorer"]:
+            logging.info("PMI_SCORING")
+            scorer = PMIScorer(self.tokenizer, config['test_domains'])
+            sorted_ds = scorer.sort_datasets()
+
+            self.train_loader_positive = {ds_name.split("_")[0]:
+                                              iter(DataLoader(ds, batch_size=config['k_shot'], shuffle=False, collate_fn=val_data.collator))
+                                          for ds_name, ds in sorted_ds.items() if int(ds_name.split("_")[1])}
+
+            self.train_loader_negative = {ds_name.split("_")[0]:
+                                              iter(DataLoader(ds, batch_size=config['k_shot'], shuffle=False, collate_fn=val_data.collator))
+                                          for ds_name, ds in sorted_ds.items() if not int(ds_name.split("_")[1])}
+        else:
+            logging.info("NORMAL TESTING")
+            # we sample 1 batch of k samples, train on those samples for `epoch` steps,
+            # and evaluate on the val set
+            # we assume (for now) that k is small enough to fit in memory
+            self.train_loader_positive = train_data.domain_dataloaders(label=1,
+                                                                       batch_size=config['k_shot'],
+                                                                       shuffle=True)
+            self.train_loader_negative = train_data.domain_dataloaders(label=0,
+                                                                       batch_size=config['k_shot'],
+                                                                       shuffle=True)
+            # make iterators for each dataset
+            for domain in self.config['test_domains']:
+                self.train_loader_positive[domain] = iter(self.train_loader_positive[domain])
+                self.train_loader_negative[domain] = iter(self.train_loader_negative[domain])
 
         self.val_loader = val_data.domain_dataloaders(batch_size=config['batch_size'], shuffle=False)
 

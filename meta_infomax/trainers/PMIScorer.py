@@ -73,6 +73,7 @@ class PMIScorer:
 
         return self.datasets_test
 
+
 if __name__ == "__main__":
     bert, tokenizer, _ = utils.get_transformer("bert-base-uncased")
     scorer = PMIScorer(tokenizer, ["dvd", "video"])

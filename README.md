@@ -14,26 +14,48 @@ pip install -r requirements.txt
 ```
 The general command for running a model is as follows
 ```
-python <MAIN_SCRIPT> --trainer=<TRAINER_NAME> --config=<CONFIG_FILE> --<MODE>
+python <MAIN_SCRIPT> --trainer=<TRAINER_NAME> --config=configs.<CONFIG_FILE> --<MODE>
 ```
 Where the MAIN_SCRIPT can be one of the following two:
 * main.py to run the model once
 * main_loop.py to run the model 3 times with different random seeds (otherwise they are the same)
+<!-- end of the list -->
 The TRAINER_NAME can be either:
 * multitask
 * prototypical
 * maml
-The CONFIG_FILE is a file that contains all the hyperparameters for training, see the examples for training in the configs folder and see the full list of config arguments [here](google.com)
+<!-- end of the list -->
+The CONFIG_FILE is a file that contains all the hyperparameters for training, see the examples for training in the configs folder and see the full list of config arguments [here](google.com).\
+\
 MODE flag can be
 * train
 * test
-Both flags can be used at the same time.
+<!-- end of the list -->
+Both flags can be used at the same time.\
+\
 An example of the usage for training maml with 3 different seeds on the dvd test dataset would be:
 ```
 python main_loop.py --trainer=maml --config=configs.maml_config_dvd --train
 ```
 ## File structure
+    .
+    ├── configs                    # config files with hyperparameters
+        |──base_config.py           # contains default parameters
+        |──..._config.py            # run specific parameters (extend and overwrite base)
+    ├── meta_infomax                   # Tools and utilities
+    ├── notebooks                       # contains usage and analyses example notebooks
+    ├── checkpoints                    # Automated te(alternatively `spec` 
+    |                                       or `tests`)
+    ├── data                   # Tools and utilities
+    ├── results
+    ├── .gitignore                   # Tools and utilities
+    ├── LICENSE
+    ├── README.md
+    ├── main.py  (alternatively `dist`)
+    ├── main_loop.py              #  files (alternatively `doc`)
+    └── requirements.txt                  # Source files (alternatively `lib` or `app`)
 
-### On the repository
+    
 
-### Created by the script
+
+

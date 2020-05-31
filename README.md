@@ -25,7 +25,7 @@ The TRAINER_NAME can be either:
 * prototypical
 * maml
 <!-- end of the list -->
-The CONFIG_FILE is a file that contains all the hyperparameters for training, see the examples for training in the configs folder and see the full list of config arguments [here](https://github.com/AmanDaVinci/meta-infomax/blob/master/configs/Readme.md).\
+The CONFIG_FILE is a file that contains all the hyperparameters for training, see the examples for training in the configs folder and see detailed usage and the full list of config arguments [here](https://github.com/AmanDaVinci/meta-infomax/blob/master/configs/Readme.md).\
 \
 MODE flag can be
 * train

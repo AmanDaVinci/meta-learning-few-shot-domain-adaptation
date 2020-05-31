@@ -71,4 +71,4 @@ For more examples on the usage and analysis of the models, see the notebooks fol
     ├── main_loop.py                    # Run model 3 times with different seeds
     └── requirements.txt                # Install for used packages
 
-    Note: folder with * and their subfolders are created automatically during run
+    Note: folders with * and their subfolders are created automatically during run

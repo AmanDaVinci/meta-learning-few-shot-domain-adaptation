@@ -59,11 +59,11 @@ class FOMAMLTrainer(BaseTrainer):
 
         # loaders are now dicts mapping from domains to individual loaders
         ### k-shot is defined per class (pos/negative), so here we multiply by 2, as we just sample the whole data
-        train_loader = train_data.episodic_dataloaders(batch_size=config['k_shot_num'],
+        train_loader = train_data.episodic_dataloaders(batch_size=config['k_shot'],
                                                          collate_fn=train_data.collator, shuffle=True)
-        val_loader = val_data.episodic_dataloaders(batch_size=config['k_shot_num'],
+        val_loader = val_data.episodic_dataloaders(batch_size=config['k_shot'],
                                                      collate_fn=val_data.collator, shuffle=True)
-        test_loader = test_data.episodic_dataloaders(batch_size=config['k_shot_num'],
+        test_loader = test_data.episodic_dataloaders(batch_size=config['k_shot'],
                                                        collate_fn=test_data.collator, shuffle=True)
 
         ### concatenating pos and neg to create balanced batches
@@ -77,7 +77,7 @@ class FOMAMLTrainer(BaseTrainer):
         self.train_loader_iterator = {domain: iter(domain_loader) for domain, domain_loader in self.train_loader.items()}
 
 
-        self.train_examples_per_episode = config['k_shot_num']*4 *  config['n_domains']
+        self.train_examples_per_episode = config['k_shot']*4 *  config['n_domains']
 
         self.current_episode = 0
 
@@ -97,7 +97,7 @@ class FOMAMLTrainer(BaseTrainer):
         logging.info("***** Running training - FoMAML *****")
         logging.info("  Num examples = %d", len(self.train_loader))
         logging.info("  Num Episodes = %d", self.config['episodes'])
-        logging.info("  K-shot = %d", self.config['k_shot_num'])
+        logging.info("  K-shot = %d", self.config['k_shot'])
         logging.info("  N-way = %d", self.config['n_domains'])
 
         ###adding lists for keeping track of the performance through training
@@ -155,7 +155,7 @@ class FOMAMLTrainer(BaseTrainer):
                 scorer = PMIScorer(self.tokenizer, [test_domain])
                 sorted_ds = scorer.sort_datasets()
                 collator = MultiTaskCollator(self.tokenizer, const_len=True)
-                sorted_domains_separated.append([DataLoader(sentiment_data, batch_size=self.config['k_shot_num'],
+                sorted_domains_separated.append([DataLoader(sentiment_data, batch_size=self.config['k_shot'],
                                                        collate_fn=collator, shuffle=False) for domain, sentiment_data in sorted_ds.items()])
             else:
                 shuffle(domain_loader)

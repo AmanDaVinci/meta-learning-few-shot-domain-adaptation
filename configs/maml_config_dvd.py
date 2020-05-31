@@ -3,7 +3,6 @@ from .base_config import base_config, get_config
 
 new_config = {
     'trainer' : 'maml',
-    'k_shot_num' : 5,  ## will be multiplied by 2, as there are 2 classes (pos/neg)
     'n_domains' : 5,
     'valid_freq': 5,
     'valid_chunks':4,       #### validation/test data will be chunked into this many batches to fit in memory

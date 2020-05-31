@@ -49,6 +49,8 @@ class EvaluationTrainer(BaseTrainer):
         self.load_checkpoint(config['exp_name'])#
         eval_dir = f"kshot_{config['k_shot']}_lr_{config['lr']}_epochs_{config['epochs']}"
         self.eval_dir = self.exp_dir / 'evaluation' / eval_dir # we save results here
+        if "pmi_scorer" in config and config["pmi_scorer"]:
+            self.eval_dir /= 'pmi'
         self.eval_dir.mkdir(parents=True, exist_ok=True)
         config['log_dir'] = config['log_dir'].as_posix() # Path not serializable
         json.dump(config, open(self.eval_dir / 'config.json', 'w')) # write used parameters to file

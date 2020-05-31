@@ -37,25 +37,38 @@ An example of the usage for training maml with 3 different seeds on the dvd test
 ```
 python main_loop.py --trainer=maml --config=configs.maml_config_dvd --train
 ```
+For more examples on the usage and analysis of the models, see the notebooks folder.
 ## File structure
+
     .
-    ├── configs                    # config files with hyperparameters
-        |──base_config.py           # contains default parameters
-        |──..._config.py            # run specific parameters (extend and overwrite base)
-    ├── meta_infomax                   # Tools and utilities
+    ├── configs                         # config files with hyperparameters
+        |──base_config.py               # contains default parameters
+        |──..._config.py                # run specific parameters (extend and overwrite base)
+    ├── meta_infomax                    # contains most parts of the implementation of the project
+        ├──datasets                     # scripts for processing and representing the data
+        ├──losses                       # contains the specific loss function for ProtoNet
+        ├──models                       # contains the files for the shared model architecture (BERT, ffn head etc.)
+        ├──trainers                     # The spedific trainer classes for the different approaches
+            ├──evaluation_trainer.py    # Class for evaluating trained models, currently compatible with ProtoNet
+            ├──fomaml_trainer.py        # Class for first-order MAML approximation
+            ├──maml_trainer.py          # Class for original MAML (not used for the project)
+            ├──multitask_trainer.py     # Class for hard-shared multitask model
+            ├──PMIScorer.py             # Class for calculating PMI scores and sort domains based on that
+            ├──protonet_trainer.py      # Class for Prototypical Network implementation
+            |──super_trainer.py         # Superclass of the above classes
     ├── notebooks                       # contains usage and analyses example notebooks
-    ├── checkpoints                    # Automated te(alternatively `spec` 
-    |                                       or `tests`)
-    ├── data                   # Tools and utilities
-    ├── results
-    ├── .gitignore                   # Tools and utilities
+    ├── checkpoints*                    # Stored models from training
+        |──...                          # model specific folders, name extracted from config
+    ├── data/mtl_dataset                # Processed data files per domain and split
+    ├── results*
+        |──.../logs                     # model specific folders, name extracted from config
+                |──....0                # tensorboard logs for the model
+                |──logs.log             # logging output
+    ├── .gitignore                  
     ├── LICENSE
     ├── README.md
-    ├── main.py  (alternatively `dist`)
-    ├── main_loop.py              #  files (alternatively `doc`)
-    └── requirements.txt                  # Source files (alternatively `lib` or `app`)
+    ├── main.py                         # Run model once
+    ├── main_loop.py                    # Run model 3 times with different seeds
+    └── requirements.txt                # Install for used packages
 
-    
-
-
-
+    Note: folder with * and their subfolders are created automatically during run

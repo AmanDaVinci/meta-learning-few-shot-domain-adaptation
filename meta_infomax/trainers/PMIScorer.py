@@ -2,7 +2,6 @@ from collections import OrderedDict, Counter
 
 import itertools
 import numpy as np
-from tqdm import tqdm
 
 from meta_infomax.datasets import utils
 from meta_infomax.datasets.fudan_reviews import MultiTaskDataset, DATASETS
@@ -53,7 +52,7 @@ class PMIScorer:
         scores = []
         words = []
         domain_ds = self.datasets_test[domain]
-        for idx in tqdm(range(len(domain_ds)), leave=False):
+        for idx in range(len(domain_ds)):
             tokenized = domain_ds[idx]["text"].split()
             sent_scores = []
             interesting_words = []

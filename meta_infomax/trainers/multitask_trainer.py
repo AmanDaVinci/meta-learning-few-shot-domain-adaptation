@@ -49,6 +49,10 @@ class MultitaskTrainer(BaseTrainer):
             val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='test',
                                         keep_datasets=config['train_domains'],
                                         random_state=config['random_state'], validation_size=0)
+        elif self.config['oracle']:
+            val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='test',
+                                        keep_datasets=config['val_domains'],
+                                        random_state=config['random_state'], validation_size=0)
         else:
             val_data = MultiTaskDataset(tokenizer=self.tokenizer, data_dir=config['data_dir'], split='train',
                                         keep_datasets=config['val_domains'],
